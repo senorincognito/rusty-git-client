@@ -227,6 +227,9 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   helper supplies it, a dialog asks for it (for GitHub and similar over HTTPS enter a personal access token as the password).
   Cancel aborts the operation. If Git has a credential helper (e.g. the macOS keychain) it stores the login afterwards. Windows
   uses Git Credential Manager's own window. Auto-fetch never asks; it pauses on missing credentials as before.
+- **Push on a diverged branch**: when your branch and its upstream each have commits the other lacks, Push does not just fail. A dialog lists both
+  sides and offers **Force push** (with lease; the remote-only commits are discarded there) or **Cancel**, which is the default and changes nothing. To keep the
+  remote commits, pull (merge or rebase) first. The check uses the last fetched state; fetch first if you suspect the remote moved.
 - **Auto-fetch** (on by default, every 3 minutes): fetches in the background while the window
   is focused, and right away when you come back to a stale repo. It never overlaps another
   git operation, stays silent (a small spinner shows while it runs), backs off when the

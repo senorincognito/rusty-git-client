@@ -3,7 +3,7 @@ import Modal from "@/components/Modal";
 import { fill, t } from "@/i18n";
 import "./PullDialog.scss";
 
-function CommitList({ title, commits, total }: { title: string; commits: BriefCommit[]; total: number }) {
+export function CommitList({ title, commits, total }: { title: string; commits: BriefCommit[]; total: number }) {
   return (
     <section>
       <h3>

@@ -159,7 +159,10 @@ app rename so users keep their data. Don't change it casually.
   operation is aborted automatically** (conflicting files named, repo left untouched) since there is no
   conflict UI yet. `pull.rebase` is intentionally not consulted.
 - **Force push** is `git push --force-with-lease`, behind a confirmation that counts the remote commits
-  that will be discarded. Only offered when the branch has an upstream.
+  that will be discarded. Only offered when the branch has an upstream. **Push on a diverged branch** (known ahead *and* behind from the last
+  status, no network check) opens `PushDialog` (same two commit lists as the pull dialog, `getDivergence`) instead of pushing: *Force push*
+  (runs the same lease push; the dialog is its confirmation) or *Cancel* (default focus). A push rejected because the remote moved since the
+  last fetch still shows git's own message, and a force push then fails on the lease as intended.
 - **Credential prompts** (`auth/mod.rs`, `features/auth/CredentialPrompt`, mounted in `App`): `run_git` (manual operations) sets
   `GIT_ASKPASS`/`SSH_ASKPASS` (+`SSH_ASKPASS_REQUIRE=force`) to a temp-dir script (not the app data dir: git splits the command at the
   space in `Application Support`) that runs this exe as `--askpass <prompt>` (handled first thing in `run()`); it asks the app over a

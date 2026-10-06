@@ -71,6 +71,15 @@ export const en = {
     rebase: "Rebase",
   },
 
+  pushDialog: {
+    title: "Branches have diverged",
+    lead: "{branch} and {upstream} each have commits the other doesn't, so a normal push would be rejected.",
+    hint: "{force} overwrites {upstream} with your branch: {discarded} It is refused if the remote changed since your last fetch. Cancel leaves everything as it is; to keep the remote commits, pull first (merge or rebase) and push afterwards.",
+    discarded: (n: number, upstream: string) =>
+      `the ${plural(n, "commit")} only on ${upstream} will be discarded there.`,
+    forcePush: "Force push",
+  },
+
   sidebar: {
     filterPlaceholder: "Filter branches and stashes…",
     filterLabel: "Filter branches and stashes",

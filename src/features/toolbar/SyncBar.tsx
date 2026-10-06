@@ -17,6 +17,7 @@ import { useLatestRequest } from "@/hooks/useLatestRequest";
 import { usePersistentState } from "@/hooks/usePersistentState";
 import { t } from "@/i18n";
 import PullDialog from "./PullDialog";
+import PushDialog from "./PushDialog";
 import "./Toolbar.scss";
 
 type Op = "fetch" | "pull" | "push" | "force";
@@ -67,6 +68,8 @@ export default function SyncBar({
   const closeMenu = useCallback(() => setMenu(null), []);
   // Set while the user has to choose how to combine diverged branches.
   const [divergence, setDivergence] = useState<Divergence | null>(null);
+  // Set when Push is pressed on a diverged branch: offers a force push instead.
+  const [pushDivergence, setPushDivergence] = useState<Divergence | null>(null);
   const start = useLatestRequest();
 
   // Auto-fetch: on by default, every 3 minutes. Global settings, remembered between sessions.
@@ -175,6 +178,20 @@ export default function SyncBar({
       setBusy(null);
       refresh();
     }
+  };
+
+  // A branch that has diverged from its upstream can't be pushed normally: suggest a force push or abort. Only the
+  // last known state is checked (no network); a push rejected because the remote moved shows git's own message.
+  const push = async () => {
+    if (status && status.upstream && status.ahead > 0 && status.behind > 0) {
+      try {
+        setPushDivergence(await getDivergence(path));
+      } catch (e) {
+        setNotice({ kind: "error", text: String(e) });
+      }
+      return;
+    }
+    await run("push");
   };
 
   const forcePush = async () => {
@@ -327,6 +344,7 @@ export default function SyncBar({
             noRemote || noBranch,
             status?.upstream ? t.sync.pushTo(status.upstream) : t.sync.publish,
             status?.upstream ? (status.ahead ? `↑${status.ahead}` : undefined) : t.sync.newBadge,
+            push,
           ),
         )}
       </div>
@@ -344,6 +362,16 @@ export default function SyncBar({
           onMerge={() => pullWith("merge")}
           onRebase={() => pullWith("rebase")}
           onCancel={() => setDivergence(null)}
+        />
+      )}
+      {pushDivergence && (
+        <PushDialog
+          divergence={pushDivergence}
+          onForcePush={() => {
+            setPushDivergence(null);
+            run("force");
+          }}
+          onCancel={() => setPushDivergence(null)}
         />
       )}
       {notice && (
