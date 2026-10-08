@@ -36,3 +36,9 @@ export const dropStash = (path: string, id: string) => invoke<void>("drop_stash_
  * stays in the working directory.
  */
 export const stashPaths = (path: string, paths: string[]) => invoke<void>("stash_paths_cmd", { path, paths });
+
+/**
+ * Applies a stash and keeps it in the list (git stash apply), putting staged changes back as staged. Needs a clean
+ * working directory; an apply that conflicts is undone and the rejection explains.
+ */
+export const applyStash = (path: string, id: string) => invoke<void>("apply_stash_cmd", { path, id });

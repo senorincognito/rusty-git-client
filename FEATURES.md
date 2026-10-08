@@ -91,7 +91,11 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   Stashes list and choose *Pop stash*) applies the stash to the working directory and removes it from the
   list, putting back staged changes as staged and restoring untracked files. It needs a clean working
   directory (the button is disabled otherwise). If the stash would conflict, the pop is undone completely
-  and the stash is kept. Applying without removing is not available yet.
+  and the stash is kept.
+- **Apply stash** (right-click the stash in the Stashes list or in the commit graph) does the same as Pop but keeps the stash in the list, so
+  you can apply it again elsewhere. Same rules: clean working directory, conflicts are undone completely.
+- **Right-click a stash in the commit graph** for *Apply stash*, *Pop stash* and *Delete stash* (the other commit actions don't apply to stashes,
+  so they are not listed). Apply and Pop are disabled, with a tooltip, while there are uncommitted changes.
 - **Delete stash** (right-click the stash in the Stashes list) removes it without applying it, after a confirmation.
   It works with uncommitted changes in the working directory; the stash's changes are lost.
 
@@ -281,7 +285,6 @@ Esc leaves text fields and the terminal alone, so it never interferes with typin
 ## Not yet implemented
 
 - Tags in the sidebar
-- Applying a stash without removing it
 - Merge and rebase as standalone actions, revert commit
 - Line-level (single line) staging and unstaging
 - A conflict-resolution UI (a pull that conflicts is cancelled and the repository left untouched)

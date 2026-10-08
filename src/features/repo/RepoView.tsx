@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import type { ChangeKind } from "@/api/changes";
 import type { CommitFile, HistoryEntry } from "@/api/commit";
 import { confirmDialog, showError, showInfo } from "@/api/dialog";
+import { applyStash, dropStash, popStash } from "@/api/stash";
 import { dropLatestCommit, fastForward, getDropInfo, getResetInfo, mergeBranch, resetToCommit, type ResetMode } from "@/api/history";
 import { openRepo, type RepoInfo } from "@/api/repo";
 import { unwatchRepo, watchRepo } from "@/api/watch";
@@ -131,6 +132,31 @@ export default function RepoView({
     }
   };
 
+  // Right-click on a stash in the graph: apply it (keeping it), pop it, or delete it after a confirmation.
+  const stashAction = async (action: "apply" | "pop" | "drop", stash: { id: string; label: string; message: string }) => {
+    try {
+      if (action === "drop") {
+        const ok = await confirmDialog(
+          t.stashes.deleteConfirm(stash.label, stash.message),
+          t.stashes.delete,
+          true,
+          t.common.delete,
+        );
+        if (!ok) return;
+        await dropStash(path, stash.id);
+      } else if (action === "pop") {
+        await popStash(path, stash.id);
+      } else {
+        await applyStash(path, stash.id);
+      }
+      if (action !== "apply" && selectedCommit?.id === stash.id) closeCommit(); // its detail view has nothing left to show
+      setOpenWorkingFile(null); // the files may have changed under an open working-tree diff
+      reload();
+    } catch (e) {
+      await showError(String(e), t.repo.stashTitle);
+    }
+  };
+
   const closeCommit = () => {
     setSelectedCommit(null);
     setOpenFile(null);
@@ -210,6 +236,7 @@ export default function RepoView({
               }}
               onFastForward={fastForwardTo}
               onMerge={mergeInto}
+              onStashApplied={reload}
               onStashDropped={(id) => {
                 if (selectedCommit?.id === id) closeCommit();
                 reload();
@@ -237,6 +264,8 @@ export default function RepoView({
                   onDropCommit={dropCommit}
                   onResetCommit={resetCommit}
                   onFastForward={(c) => fastForwardTo(c.id)}
+                  onStashAction={stashAction}
+                  hasChanges={changeCount > 0}
                 />
               </div>
               {history && !rebasing && (

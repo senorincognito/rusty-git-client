@@ -74,6 +74,8 @@ export default function Graph({
   onDropCommit,
   onResetCommit,
   onFastForward,
+  onStashAction,
+  hasChanges,
 }: {
   path: string;
   refreshKey?: number;
@@ -92,6 +94,10 @@ export default function Graph({
   /** Reset the branch to a commit (soft, mixed or hard). */
   onResetCommit: (commit: { id: string; shortId: string }, mode: ResetMode) => void;
   onFastForward: (commit: { id: string; shortId: string }) => void;
+  /** Right-click on a stash: apply, pop or delete it. */
+  onStashAction: (action: "apply" | "pop" | "drop", stash: { id: string; label: string; message: string }) => void;
+  /** There are uncommitted changes, so a stash can't be applied cleanly. */
+  hasChanges: boolean;
 }) {
   const [graph, setGraph] = useState<GraphData | null>(null);
   const [limit, setLimit] = useState(PAGE);
@@ -239,7 +245,42 @@ export default function Graph({
           </div>
         ))}
       </div>
-      {menu && (
+      {menu && menu.row.isStash && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={closeMenu}
+          items={(() => {
+            const stash = {
+              id: menu.row.id,
+              label: menu.row.refs.find((r) => r.kind === "stash")?.name ?? menu.row.shortId,
+              message: menu.row.summary,
+            };
+            return [
+              {
+                label: t.stashes.apply,
+                disabled: hasChanges,
+                title: hasChanges ? t.stashes.popNeedsClean : t.stashes.applyHint,
+                onClick: () => onStashAction("apply", stash),
+              },
+              {
+                label: t.stashes.pop,
+                disabled: hasChanges,
+                title: hasChanges ? t.stashes.popNeedsClean : t.stashes.popHint,
+                onClick: () => onStashAction("pop", stash),
+              },
+              {
+                label: t.stashes.delete,
+                danger: true,
+                separatorBefore: true,
+                title: t.stashes.deleteHint,
+                onClick: () => onStashAction("drop", stash),
+              },
+            ];
+          })()}
+        />
+      )}
+      {menu && !menu.row.isStash && (
         <ContextMenu
           x={menu.x}
           y={menu.y}

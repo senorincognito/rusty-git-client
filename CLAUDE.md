@@ -61,7 +61,7 @@ the module path to be visible from the crate root.
 | `commit/mod.rs` | `features/commit` | all diff rendering: `get_commit_detail` (files of a commit, renames), `get_file_diff` (a commit's file), `get_working_diff` (staged/unstaged file); shared `diff_options` + `render_diff` |
 | `sidebar/branches.rs` | `features/sidebar` | list, create+checkout, checkout, delete, rename (local) |
 | `sidebar/remotes.rs` | `features/sidebar` | `get_remotes` (every remote with branches, `isTarget`, tracking count), `add_remote_cmd`, `set_remote_url_cmd`, `delete_remote_cmd`, `set_target_remote`; delete/rename remote branches take a `remote` argument |
-| `sidebar/stash.rs` | `features/sidebar`, `features/changes` | `get_stashes`, `create_stash` (stashes everything incl. untracked), `stash_paths_cmd` (selected files, via system git), `pop_stash_cmd`, `drop_stash_cmd`; helpers `stash_index_of`, `untracked_tree` |
+| `sidebar/stash.rs` | `features/sidebar`, `features/changes` | `get_stashes`, `create_stash` (stashes everything incl. untracked), `stash_paths_cmd` (selected files, via system git), `pop_stash_cmd`, `apply_stash_cmd`, `drop_stash_cmd`; helpers `stash_index_of`, `untracked_tree` |
 | `toolbar/sync.rs` | `features/toolbar` | fetch / pull / push / force push / auto-fetch / diverged pull; `run_git`, `run_git_with` |
 | `auth/mod.rs` | `features/auth` | credential prompts: `GIT_ASKPASS`/`SSH_ASKPASS` script, loopback socket, `credentials-request` event, `answer_credentials` |
 | `terminal/mod.rs` | `features/terminal` | PTY sessions (`portable-pty`) feeding the xterm.js panel |
@@ -257,8 +257,9 @@ app rename so users keep their data. Don't change it casually.
   re-stages what was staged). Pop requires a clean working directory (disabled in the UI via
   `useWorkingChangeCount`, enforced in Rust) so a
   conflicting pop can be undone exactly (`restore_clean`) with the stash kept. **Delete stash** (`drop_stash_cmd`, Stashes right-click,
-  confirmation first) just calls `stash_drop` by commit id and needs no clean working directory. Apply-without-drop
-  is not built yet.
+  confirmation first) just calls `stash_drop` by commit id and needs no clean working directory. **Apply** (`apply_stash_cmd`, `apply_stash(repo, id, remove)`; pop is `apply_stash(.., true)`) is the same
+  clean-directory apply and conflict undo without the final drop. Both menus offer it: Stashes list and, for `isStash` rows, the graph's context menu (which
+  then shows only Apply / Pop / Delete stash, via `RepoView.stashAction`; `hasChanges` disables Apply and Pop).
 - **File context menu** (right-click a row in `Changes`): Unstaged = Stage / Discard / Stash, Staged = Unstage / Stash. Discard
   (`discard_paths`) restores from the index (so staged edits survive) or deletes an untracked file, only for paths that
   really have unstaged changes, never for conflicted files, always after a confirmation. Single-file **Stash**
@@ -449,7 +450,7 @@ Release), and a Windows code-signing certificate to avoid the SmartScreen "unkno
 
 ## Not implemented yet
 
-Tags in the sidebar; applying a stash without removing it; line-level (single line) staging and unstaging; merge/rebase as standalone actions; discard
+Tags in the sidebar; line-level (single line) staging and unstaging; merge/rebase as standalone actions; discard
 changes and stash; conflict resolution UI (pulls with conflicts are aborted); syntax highlighting and intra-line diff highlighting; side-by-side diff; a
 "you rewrote pushed history, force push instead" hint in the diverged-pull dialog; a conflict preview
 (`git merge-tree`) before pulling.

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { confirmDialog } from "@/api/dialog";
-import { dropStash, getStashes, popStash, type StashEntry } from "@/api/stash";
+import { applyStash, dropStash, getStashes, popStash, type StashEntry } from "@/api/stash";
 import ContextMenu from "@/components/ContextMenu";
 import Section from "@/components/Section";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
@@ -18,6 +18,7 @@ export default function Stashes({
   selectedId,
   onSelect,
   onPopped,
+  onApplied,
   onDropped,
   filter,
 }: {
@@ -28,6 +29,8 @@ export default function Stashes({
   onSelect: (stash: { id: string; shortId: string }) => void;
   /** A stash was applied and removed (by its commit id). */
   onPopped: (id: string) => void;
+  /** A stash was applied and kept. */
+  onApplied: () => void;
   /** A stash was deleted without being applied (by its commit id). */
   onDropped: (id: string) => void;
   /** Only stashes whose message or "stash@{n}" matches are listed. */
@@ -64,6 +67,19 @@ export default function Stashes({
     try {
       await popStash(path, stash.id);
       onPopped(stash.id);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setPopping(false);
+    }
+  };
+
+  const apply = async (stash: StashEntry) => {
+    setPopping(true);
+    setError(null);
+    try {
+      await applyStash(path, stash.id);
+      onApplied();
     } catch (e) {
       setError(String(e));
     } finally {
@@ -127,6 +143,12 @@ export default function Stashes({
           y={menu.y}
           onClose={closeMenu}
           items={[
+            {
+              label: t.stashes.apply,
+              disabled: popping || workingChanges > 0,
+              title: workingChanges > 0 ? t.stashes.popNeedsClean : t.stashes.applyHint,
+              onClick: () => apply(menu.stash),
+            },
             {
               label: t.stashes.pop,
               disabled: popping || workingChanges > 0,

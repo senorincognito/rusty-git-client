@@ -67,6 +67,7 @@ pub fn run() {
             sidebar::remotes::set_remote_url_cmd,
             sidebar::remotes::delete_remote_cmd,
             sidebar::remotes::set_target_remote,
+            sidebar::stash::apply_stash_cmd,
             sidebar::stash::create_stash,
             sidebar::stash::get_stashes,
             sidebar::stash::pop_stash_cmd,

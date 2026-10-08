@@ -196,6 +196,8 @@ export const en = {
     title: "Stashes",
     none: "No stashes.",
     noMatch: "No stash matches the filter.",
+    apply: "Apply stash",
+    applyHint: "Apply this stash to the working directory and keep it in the list",
     pop: "Pop stash",
     popNeedsClean: "Commit or stash your uncommitted changes first",
     popHint: "Apply this stash to the working directory and remove it from the list",
@@ -401,6 +403,7 @@ export const en = {
     terminal: ">_ Terminal",
     terminalHint: "Toggle terminal (Ctrl+`)",
     dropTitle: "Drop commit",
+    stashTitle: "Stash",
     fastForwardTitle: "Fast-forward",
     mergeTitle: "Merge",
     mergeConfirm: (source: string) =>

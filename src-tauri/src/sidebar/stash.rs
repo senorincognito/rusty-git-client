@@ -111,7 +111,14 @@ fn restore_clean(repo: &Repository) {
 /// It needs a clean working directory. There is no conflict resolution in the app yet, so this
 /// guarantees a conflicting pop can be undone completely: the repository is restored to the clean
 /// state it was in and the stash is kept.
+/// Applies the stash and removes it from the list (git stash pop).
 fn pop_stash(repo: &mut Repository, id: &str) -> Result<(), String> {
+    apply_stash(repo, id, true)
+}
+
+/// Applies the stash to a clean working directory, re-staging what was staged; with `remove` it is dropped afterwards.
+/// A conflicting apply is undone and the stash is kept either way.
+fn apply_stash(repo: &mut Repository, id: &str, remove: bool) -> Result<(), String> {
     let oid = Oid::from_str(id).map_err(err)?;
     let index = stash_index_of(repo, oid).ok_or("That stash no longer exists")?;
     if repo.head().and_then(|h| h.peel_to_commit()).is_err() {
@@ -136,7 +143,12 @@ fn pop_stash(repo: &mut Repository, id: &str) -> Result<(), String> {
         })
         .unwrap_or(false);
     match applied {
-        Ok(()) if !conflicted => repo.stash_drop(index).map_err(err),
+        Ok(()) if !conflicted => {
+            if remove {
+                repo.stash_drop(index).map_err(err)?;
+            }
+            Ok(())
+        }
         outcome => {
             restore_clean(repo);
             let reason = match outcome {
@@ -190,6 +202,17 @@ pub async fn pop_stash_cmd(path: String, id: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         let mut repo = Repository::discover(&path).map_err(err)?;
         pop_stash(&mut repo, &id)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Applies a stash and keeps it in the list. Needs a clean working directory.
+#[tauri::command]
+pub async fn apply_stash_cmd(path: String, id: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut repo = Repository::discover(&path).map_err(err)?;
+        apply_stash(&mut repo, &id, false)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -430,6 +453,31 @@ mod tests {
         assert_eq!(repo.state(), git2::RepositoryState::Clean);
         assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), "committed version");
         assert!(!dir.join("from-stash.txt").exists());
+        assert_eq!(list_stashes(&mut repo).unwrap().len(), 1);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn apply_restores_changes_and_keeps_the_stash() {
+        let (dir, mut repo) = setup("apply");
+        fs::write(dir.join("a.txt"), "one").unwrap();
+        commit_all(&repo, "base");
+        fs::write(dir.join("a.txt"), "two").unwrap();
+        fs::write(dir.join("new.txt"), "untracked").unwrap();
+        let id = save_stash(&mut repo, Some("keep me")).unwrap().to_string();
+        assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), "one");
+
+        apply_stash(&mut repo, &id, false).unwrap();
+        assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), "two");
+        assert_eq!(fs::read_to_string(dir.join("new.txt")).unwrap(), "untracked");
+        let list = list_stashes(&mut repo).unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].id, id);
+
+        // With changes in the way nothing is applied; the stash stays.
+        let e = apply_stash(&mut repo, &id, false).unwrap_err();
+        assert!(e.contains("uncommitted changes"), "{e}");
         assert_eq!(list_stashes(&mut repo).unwrap().len(), 1);
 
         let _ = fs::remove_dir_all(&dir);

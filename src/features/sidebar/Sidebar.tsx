@@ -14,6 +14,7 @@ export default function Sidebar({
   selectedId,
   onSelectCommit,
   onStashPopped,
+  onStashApplied,
   onStashDropped,
   onFastForward,
   onMerge,
@@ -28,6 +29,8 @@ export default function Sidebar({
   onSelectCommit: (commit: { id: string; shortId: string }) => void;
   /** A stash was popped from the list (by its commit id). */
   onStashPopped: (id: string) => void;
+  /** A stash was applied from the list and kept. */
+  onStashApplied: () => void;
   /** A stash was deleted from the list (by its commit id). */
   onStashDropped: (id: string) => void;
   /** Fast-forward the checked-out branch to this commit id or full ref name. */
@@ -71,6 +74,7 @@ export default function Sidebar({
           onSelect={onSelectCommit}
           filter={filter}
           onPopped={onStashPopped}
+          onApplied={onStashApplied}
           onDropped={onStashDropped}
         />
       </nav>
