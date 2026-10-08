@@ -1,0 +1,93 @@
+@use "@/styles/core" as *;
+
+.filehistory {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: $bg;
+}
+
+.fh-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  background: $panel;
+  border-bottom: 1px solid $border;
+}
+
+.fh-title {
+  flex: none;
+  @include section-label;
+}
+
+.fh-path {
+  min-width: 0;
+  @include truncate;
+  font-weight: 600;
+}
+
+.fh-count {
+  flex: none;
+  margin-left: auto;
+  font-size: 12px;
+  color: $muted;
+}
+
+.fh-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+
+  ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 28px;
+    padding: 0 16px;
+    white-space: nowrap;
+    cursor: pointer;
+
+    &:hover {
+      background: $hover-tint;
+    }
+
+    &.selected {
+      background: $accent-tint;
+    }
+  }
+}
+
+.fh-sha {
+  flex: none;
+  color: $accent;
+  font-family: $font-mono;
+}
+
+.fh-summary {
+  flex: 1;
+  min-width: 0;
+  @include truncate;
+}
+
+.fh-from,
+.fh-author,
+.fh-date {
+  flex: none;
+  font-size: 12px;
+  color: $muted;
+}
+
+.fh-author {
+  max-width: 160px;
+  @include truncate;
+}

@@ -98,6 +98,7 @@ export default function Changes({
   hidden = false,
   selected = null,
   onSelectFile,
+  onFileHistory,
   onCommitted,
 }: {
   path: string;
@@ -107,6 +108,8 @@ export default function Changes({
   /** The file whose diff is open in the centre (a file can be listed both staged and unstaged). */
   selected?: { path: string; staged: boolean } | null;
   onSelectFile: (file: { path: string; staged: boolean; status: ChangeKind }) => void;
+  /** Show the commits that changed this file (right-click menu). */
+  onFileHistory: (path: string) => void;
   onCommitted: () => void;
 }) {
   const [changes, setChanges] = useState<FileChange[]>([]);
@@ -257,8 +260,19 @@ export default function Changes({
       title: t.changes.stashFileHint,
       onClick: () => stashFile(file),
     };
+    const historyItem: MenuItem = {
+      label: t.changes.fileHistory,
+      // A file that is new has no past yet.
+      disabled: m.kind === "new",
+      title: m.kind === "new" ? t.changes.fileHistoryNew : t.changes.fileHistoryHint,
+      onClick: () => onFileHistory(m.path),
+    };
     if (m.staged) {
-      return [{ label: t.changes.unstage, disabled: busy, onClick: () => run(() => unstagePaths(path, [m.path])) }, stashItem];
+      return [
+        { label: t.changes.unstage, disabled: busy, onClick: () => run(() => unstagePaths(path, [m.path])) },
+        stashItem,
+        { ...historyItem, separatorBefore: true },
+      ];
     }
     return [
       { label: t.changes.stage, disabled: busy, onClick: () => run(() => stagePaths(path, [m.path])) },
@@ -273,6 +287,7 @@ export default function Changes({
         onClick: () => discard(file),
       },
       stashItem,
+      { ...historyItem, separatorBefore: true },
     ];
   };
 

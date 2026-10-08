@@ -162,6 +162,13 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   changes are set aside and restored. If the branch is already contained you are told so. Conflicts are not resolved in the app yet: the merge is
   cancelled, the conflicting files are named and nothing changes. Not available on a detached HEAD.
 
+## File history
+- Right-click a changed file in the staging panel (staged or unstaged) and choose **File history**. The centre area then lists every commit that
+  changed that file, newest first (up to 500), with a badge for what the commit did to it (new, modified, renamed, deleted), the short id, message,
+  author and date. The history follows the file across renames. Click a commit to see exactly what it changed in the file, in the usual diff view
+  (**Back to file history** or Esc returns to the list at the same scroll position; Esc in the list returns to the graph). A file that is new and
+  not committed yet has no history, so the item is greyed out.
+
 ## Fast-forward
 - Right-click a **local branch** and choose **Fast-forward <current> to <branch>**, or right-click a **commit** in the graph and choose
   **Fast-forward to this commit**: the checked-out branch moves forward to it, like `git merge --ff-only`, and your files are updated.

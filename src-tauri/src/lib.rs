@@ -25,6 +25,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             auth::answer_credentials,
+            commit::file_history::get_file_history,
             graph::fast_forward::fast_forward_cmd,
             graph::merge::merge_branch_cmd,
             sidebar::branches::checkout_local_branch,

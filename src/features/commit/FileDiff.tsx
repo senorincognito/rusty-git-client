@@ -45,6 +45,8 @@ export default function FileDiff({
   refreshKey = 0,
   onChanged,
   onClose,
+  backLabel,
+  backHint,
 }: {
   path: string;
   source: DiffSource;
@@ -53,6 +55,9 @@ export default function FileDiff({
   /** A hunk was staged or discarded, so the staging lists and the graph need to refresh. */
   onChanged?: () => void;
   onClose: () => void;
+  /** Texts of the back button when the diff was opened from somewhere other than the graph or the staging lists. */
+  backLabel?: string;
+  backHint?: string;
 }) {
   const [full, setFull] = usePersistentState("diff.fullFile", true, (v): v is boolean => typeof v === "boolean");
   const [diff, setDiff] = useState<FileDiffData | null>(null);
@@ -237,9 +242,9 @@ export default function FileDiff({
         <button
           className="ghost"
           onClick={onClose}
-          title={isWorking ? t.diff.closeHint : t.diff.backHint}
+          title={backHint ?? (isWorking ? t.diff.closeHint : t.diff.backHint)}
         >
-          {isWorking ? t.diff.back : t.diff.backToGraph}
+          {backLabel ?? (isWorking ? t.diff.back : t.diff.backToGraph)}
         </button>
         <FileBadge kind={file.status} />
         <span className="fd-path" title={file.path}>

@@ -31,3 +31,19 @@ export interface CommitDetail {
 
 export const getCommitDetail = (path: string, id: string) =>
   invoke<CommitDetail>("get_commit_detail", { path, id });
+
+/** One commit that changed a file. `path` is the file's name in that commit (it differs before a rename). */
+export interface HistoryEntry {
+  id: string;
+  shortId: string;
+  summary: string;
+  author: string;
+  /** Unix seconds. */
+  time: number;
+  status: CommitFile["status"];
+  path: string;
+  oldPath: string | null;
+}
+
+/** The commits that changed a file, newest first, following it across renames (at most 500). */
+export const getFileHistory = (path: string, file: string) => invoke<HistoryEntry[]>("get_file_history", { path, file });

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import type { ChangeKind } from "@/api/changes";
-import type { CommitFile } from "@/api/commit";
+import type { CommitFile, HistoryEntry } from "@/api/commit";
 import { confirmDialog, showError, showInfo } from "@/api/dialog";
 import { dropLatestCommit, fastForward, getDropInfo, getResetInfo, mergeBranch, resetToCommit, type ResetMode } from "@/api/history";
 import { openRepo, type RepoInfo } from "@/api/repo";
@@ -9,6 +9,7 @@ import { unwatchRepo, watchRepo } from "@/api/watch";
 import ResizablePanel from "@/components/ResizablePanel";
 import Changes from "@/features/changes/Changes";
 import CommitDetail from "@/features/commit/CommitDetail";
+import FileHistory from "@/features/commit/FileHistory";
 import FileDiff from "@/features/commit/FileDiff";
 import Graph from "@/features/graph/Graph";
 import InteractiveRebase from "@/features/rebase/InteractiveRebase";
@@ -44,6 +45,8 @@ export default function RepoView({
   const [openFile, setOpenFile] = useState<CommitFile | null>(null);
   // An uncommitted file (staged or not) shown in the centre; chosen from the Changes panel.
   const [openWorkingFile, setOpenWorkingFile] = useState<{ path: string; staged: boolean; status: ChangeKind } | null>(null);
+  // The history of one file shown in the centre (from the Changes right-click menu), and the commit of it whose diff is open.
+  const [history, setHistory] = useState<{ file: string; entry: HistoryEntry | null } | null>(null);
   const path = repo.path;
 
   // Right-click > Interactive rebase: its screen replaces the sidebar and the graph; the right panel
@@ -52,6 +55,7 @@ export default function RepoView({
     setRenaming(null);
     closeCommit();
     setOpenWorkingFile(null);
+    setHistory(null);
     setRebasing(base);
   };
   const cancelRebase = useCallback(() => {
@@ -64,6 +68,7 @@ export default function RepoView({
     setSelectedCommit(commit);
     setOpenFile(null);
     setOpenWorkingFile(null);
+    setHistory(null);
   };
   // Right-click > Drop commit: confirm what will be lost and rewritten, then drop it.
   const dropCommit = async (commit: { id: string; shortId: string }) => {
@@ -194,12 +199,12 @@ export default function RepoView({
             />
             <div className="center">
               {/* The graph stays mounted (just hidden) while a file is open, so its scroll position survives. */}
-              <div className={"center-pane" + (openFile || openWorkingFile ? " hidden" : "")}>
+              <div className={"center-pane" + (openFile || openWorkingFile || history ? " hidden" : "")}>
                 <Graph
                   path={path}
                   refreshKey={graphKey}
                   selectedId={selectedCommit?.id ?? null}
-                  keyboard={!rebasing && !openFile && !openWorkingFile && !renaming}
+                  keyboard={!rebasing && !openFile && !openWorkingFile && !renaming && !history}
                   onSelectCommit={selectCommit}
                   onSelectWip={() => {
                     closeCommit(); // back to the working-directory changes in the right panel
@@ -216,6 +221,29 @@ export default function RepoView({
                   onFastForward={(c) => fastForwardTo(c.id)}
                 />
               </div>
+              {history && !rebasing && (
+                <div className={"center-pane" + (history.entry ? " hidden" : "")}>
+                  <FileHistory
+                    path={path}
+                    file={history.file}
+                    refreshKey={graphKey}
+                    active={history.entry === null}
+                    openId={history.entry?.id ?? null}
+                    onOpen={(entry) => setHistory({ file: history.file, entry })}
+                    onClose={() => setHistory(null)}
+                  />
+                </div>
+              )}
+              {history?.entry && !rebasing && (
+                <FileDiff
+                  path={path}
+                  source={{ kind: "commit", id: history.entry.id, shortId: history.entry.shortId }}
+                  file={{ path: history.entry.path, oldPath: history.entry.oldPath, status: history.entry.status }}
+                  backLabel={t.fileHistory.backToList}
+                  backHint={t.fileHistory.backToListHint}
+                  onClose={() => setHistory({ file: history.file, entry: null })}
+                />
+              )}
               {openFile && selectedCommit && !rebasing && (
                 <FileDiff
                   path={path}
@@ -296,7 +324,17 @@ export default function RepoView({
             hidden={renaming !== null || selectedCommit !== null}
             selected={openWorkingFile && { path: openWorkingFile.path, staged: openWorkingFile.staged }}
             // A diff would open underneath the rebase screen.
-            onSelectFile={(f) => !rebasing && setOpenWorkingFile(f)}
+            onSelectFile={(f) => {
+              if (rebasing) return;
+              setHistory(null); // the file diff takes over the centre
+              setOpenWorkingFile(f);
+            }}
+            onFileHistory={(file) => {
+              if (rebasing) return;
+              setOpenFile(null);
+              setOpenWorkingFile(null);
+              setHistory({ file, entry: null });
+            }}
             onCommitted={() => {
               setOpenWorkingFile(null); // what was committed no longer has a working diff
               reload();

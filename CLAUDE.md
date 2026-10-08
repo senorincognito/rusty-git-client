@@ -57,6 +57,7 @@ the module path to be visible from the crate root.
 | `history/test_support.rs` | tests only | small repositories with real commits for the history tests |
 | `changes/mod.rs` | `features/changes` | status, stage/unstage, `discard_paths` (whole-file discard), `create_commit` (new or `amend`), `get_head_commit` |
 | `changes/hunks.rs` | diff view | `stage_hunk`, `discard_hunk`, `unstage_hunk`: apply one hunk of a file's staged/unstaged changes (see Product decisions) |
+| `commit/file_history.rs` | `features/commit/FileHistory` | `get_file_history`: `git log --follow --name-status` for one file (≤ 500 commits), parsed into id/author/time/status/path-at-that-commit/oldPath |
 | `commit/mod.rs` | `features/commit` | all diff rendering: `get_commit_detail` (files of a commit, renames), `get_file_diff` (a commit's file), `get_working_diff` (staged/unstaged file); shared `diff_options` + `render_diff` |
 | `sidebar/branches.rs` | `features/sidebar` | list, create+checkout, checkout, delete, rename (local) |
 | `sidebar/remotes.rs` | `features/sidebar` | `get_remotes` (every remote with branches, `isTarget`, tracking count), `add_remote_cmd`, `set_remote_url_cmd`, `delete_remote_cmd`, `set_target_remote`; delete/rename remote branches take a `remote` argument |
@@ -262,6 +263,11 @@ app rename so users keep their data. Don't change it casually.
   really have unstaged changes, never for conflicted files, always after a confirmation. Single-file **Stash**
   runs `git --literal-pathspecs stash push --include-untracked -- <paths>`: libgit2's path-limited `stash_save_ext` also
   cleans the files that were NOT selected, and git2 cannot set its message, so don't use it.
+- **File history** (*File history* in the Changes file menu, not for new files): `RepoView` keeps `history: { file, entry }`. `FileHistory` (centre, `center-pane`,
+  stays mounted but `hidden` while a commit's diff is open so the scroll position survives; its Escape is off then via `active`) lists
+  `get_file_history`; a click sets `entry` and shows the existing `FileDiff` with `source` = that commit and the path *as it was in that commit*
+  (+ `oldPath` for renames), with `backLabel`/`backHint` overriding the back button. Uses system git (`--follow` is not available in libgit2) with
+  `--literal-pathspecs`; merge commits without a change to the file simply don't appear. Selecting a commit/working file or starting a rebase closes it.
 - **Hunks**: a hunk is a maximal run of added/removed lines (`DiffLine::block`, numbered in file order and identical in
   full-file and context-only views); `FileDiff::blocks` holds one FNV fingerprint per hunk. Every diff view shows a
   heading row per hunk; only the *unstaged* view of a tracked, non-conflicted, non-binary file gets **Stage hunk** /

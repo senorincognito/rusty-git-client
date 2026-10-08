@@ -80,6 +80,19 @@ export const en = {
     forcePush: "Force push",
   },
 
+  fileHistory: {
+    title: "File history",
+    back: "← Back to graph",
+    backHint: "Back to the commit graph (Esc)",
+    backToList: "← Back to file history",
+    backToListHint: "Back to the list of commits for this file (Esc)",
+    count: (n: number) => plural(n, "commit"),
+    none: "No commit has changed this file yet.",
+    capped: "Only the newest 500 commits are listed.",
+    openHint: (shortId: string) => `Show what ${shortId} changed in this file`,
+    renamedFrom: (old: string) => `renamed from ${old}`,
+  },
+
   sidebar: {
     filterPlaceholder: "Filter branches and stashes…",
     filterLabel: "Filter branches and stashes",
@@ -270,6 +283,9 @@ export const en = {
     count: (n: number) => ` (${n})`,
     // Right-click menu on a file
     stash: "Stash",
+    fileHistory: "File history",
+    fileHistoryHint: "List every commit that changed this file",
+    fileHistoryNew: "This file is new: it has no history yet",
     stashFileHint: "Move this file's uncommitted changes (staged and unstaged) into a new stash; everything else stays",
     deleteFile: "Delete file…",
     restoreFile: "Restore file…",

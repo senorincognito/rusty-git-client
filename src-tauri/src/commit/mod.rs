@@ -1,3 +1,5 @@
+pub mod file_history;
+
 use git2::{Delta, DiffFindOptions, DiffFormat, DiffOptions, Oid, Repository};
 use serde::Serialize;
 
