@@ -469,6 +469,10 @@ function RewordDialog({
   return (
     <Modal title={t.rebase.rewordTitle(commit.shortId)} onClose={onCancel} width={560}>
       <textarea
+        spellCheck={false}
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
         ref={box}
         className="reword-text"
         value={message}

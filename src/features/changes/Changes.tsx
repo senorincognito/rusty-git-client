@@ -377,6 +377,10 @@ export default function Changes({
           </p>
         )}
         <textarea
+          spellCheck={false}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
           placeholder={t.changes.messagePlaceholder}
           value={message}
           onChange={(e) => setMessage(e.target.value)}

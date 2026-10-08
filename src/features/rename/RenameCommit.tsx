@@ -74,6 +74,10 @@ export default function RenameCommit({
       <div className="renamebody">
         <label htmlFor="rename-message">{t.rename.messageLabel}</label>
         <textarea
+          spellCheck={false}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
           id="rename-message"
           ref={box}
           value={message}
