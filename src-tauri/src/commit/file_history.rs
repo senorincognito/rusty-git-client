@@ -62,33 +62,40 @@ fn parse(out: &str) -> Vec<HistoryEntry> {
     entries
 }
 
-/// Every commit that changed `file`, newest first, following the file across renames (`git log --follow`).
-fn file_history(repo_path: &str, file: &str) -> Result<Vec<HistoryEntry>, String> {
+/// Every commit that changed `file`, newest first, following the file across renames (`git log --follow`). With
+/// `from` the history starts at that commit (`file` is its name there) and leaves out everything that came later.
+fn file_history(repo_path: &str, file: &str, from: Option<&str>) -> Result<Vec<HistoryEntry>, String> {
     let limit = format!("-n{LIMIT}");
-    let out = crate::toolbar::sync::run_git_with(
-        repo_path,
-        &[
-            "--literal-pathspecs",
-            "-c",
-            "core.quotepath=false",
-            "log",
-            "--follow",
-            "--no-color",
-            &limit,
-            "--format=%x1e%H%x1f%an%x1f%at%x1f%s",
-            "--name-status",
-            "--",
-            file,
-        ],
-        Some(Duration::from_secs(30)),
-    )?;
+    // Only a commit id may be passed on: anything else could be read as an option.
+    let start = match from {
+        Some(id) => Some(git2::Oid::from_str(id).map_err(|_| format!("\"{id}\" is not a commit id"))?.to_string()),
+        None => None,
+    };
+    let mut args = vec![
+        "--literal-pathspecs",
+        "-c",
+        "core.quotepath=false",
+        "log",
+        "--follow",
+        "--no-color",
+        &limit,
+        "--format=%x1e%H%x1f%an%x1f%at%x1f%s",
+        "--name-status",
+    ];
+    if let Some(id) = &start {
+        args.push(id);
+    }
+    args.extend(["--", file]);
+    let out = crate::toolbar::sync::run_git_with(repo_path, &args, Some(Duration::from_secs(30)))?;
     Ok(parse(&out))
 }
 
-/// The commits that touched `file` (a path in the working tree), newest first.
+/// The commits that touched `file`, newest first; with `from` (a commit id) only that commit and its ancestors.
 #[tauri::command]
-pub async fn get_file_history(path: String, file: String) -> Result<Vec<HistoryEntry>, String> {
-    tauri::async_runtime::spawn_blocking(move || file_history(&path, &file)).await.map_err(|e| e.to_string())?
+pub async fn get_file_history(path: String, file: String, from: Option<String>) -> Result<Vec<HistoryEntry>, String> {
+    tauri::async_runtime::spawn_blocking(move || file_history(&path, &file, from.as_deref()))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[cfg(test)]
@@ -122,7 +129,7 @@ mod tests {
         commit_file(&repo, &dir, "h.txt", &body.replace("line 3", "line three").replace("line 9", "nine"), "edit h");
         let p = dir.to_str().unwrap();
 
-        let h = file_history(p, "h.txt").unwrap();
+        let h = file_history(p, "h.txt", None).unwrap();
         let summaries: Vec<_> = h.iter().map(|e| e.summary.as_str()).collect();
         assert_eq!(summaries, ["edit h", "rename f to h", "edit f", "add f"]);
         let status: Vec<_> = h.iter().map(|e| (e.status, e.path.as_str(), e.old_path.as_deref())).collect();
@@ -139,7 +146,15 @@ mod tests {
         assert_eq!(h[3].author, "D");
 
         // A file that never existed has no history.
-        assert!(file_history(p, "nope.txt").unwrap().is_empty());
+        assert!(file_history(p, "nope.txt", None).unwrap().is_empty());
+
+        // From a given commit on: the later commits are left out, and the name is the one at that commit.
+        let from_rename = file_history(p, "h.txt", Some(&h[1].id)).unwrap();
+        let summaries: Vec<_> = from_rename.iter().map(|e| e.summary.as_str()).collect();
+        assert_eq!(summaries, ["rename f to h", "edit f", "add f"]);
+        let from_old = file_history(p, "f.txt", Some(&h[2].id)).unwrap();
+        assert_eq!(from_old.len(), 2);
+        assert!(file_history(p, "h.txt", Some("--all")).unwrap_err().contains("not a commit id"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

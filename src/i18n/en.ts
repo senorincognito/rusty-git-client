@@ -82,6 +82,7 @@ export const en = {
 
   fileHistory: {
     title: "File history",
+    titleFrom: (shortId: string) => `File history up to ${shortId}`,
     back: "← Back to graph",
     backHint: "Back to the commit graph (Esc)",
     backToList: "← Back to file history",
@@ -303,6 +304,9 @@ export const en = {
   },
 
   commitDetail: {
+    fileHistory: "File history",
+    fileHistoryHint: "List the commits that changed this file, starting at this commit",
+    fileHistoryStash: "A stash's files have no history of their own",
     title: "Commit",
     close: "Close commit details",
     workingChanges: (n: number) => `${plural(n, "file change")} in working directory`,

@@ -45,5 +45,9 @@ export interface HistoryEntry {
   oldPath: string | null;
 }
 
-/** The commits that changed a file, newest first, following it across renames (at most 500). */
-export const getFileHistory = (path: string, file: string) => invoke<HistoryEntry[]>("get_file_history", { path, file });
+/**
+ * The commits that changed a file, newest first, following it across renames (at most 500). With `from` (a commit id)
+ * the list starts at that commit, where `file` is the file's name, and leaves out later changes.
+ */
+export const getFileHistory = (path: string, file: string, from: string | null = null) =>
+  invoke<HistoryEntry[]>("get_file_history", { path, file, from });

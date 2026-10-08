@@ -46,7 +46,12 @@ export default function RepoView({
   // An uncommitted file (staged or not) shown in the centre; chosen from the Changes panel.
   const [openWorkingFile, setOpenWorkingFile] = useState<{ path: string; staged: boolean; status: ChangeKind } | null>(null);
   // The history of one file shown in the centre (from the Changes right-click menu), and the commit of it whose diff is open.
-  const [history, setHistory] = useState<{ file: string; entry: HistoryEntry | null } | null>(null);
+  const [history, setHistory] = useState<{
+    file: string;
+    /** Start at this commit (opened from a commit's file list); null = the newest commits. */
+    from: { id: string; shortId: string } | null;
+    entry: HistoryEntry | null;
+  } | null>(null);
   const path = repo.path;
 
   // Right-click > Interactive rebase: its screen replaces the sidebar and the graph; the right panel
@@ -226,10 +231,11 @@ export default function RepoView({
                   <FileHistory
                     path={path}
                     file={history.file}
+                    from={history.from}
                     refreshKey={graphKey}
-                    active={history.entry === null}
+                    active={history.entry === null && !openFile && !openWorkingFile}
                     openId={history.entry?.id ?? null}
-                    onOpen={(entry) => setHistory({ file: history.file, entry })}
+                    onOpen={(entry) => setHistory({ ...history, entry })}
                     onClose={() => setHistory(null)}
                   />
                 </div>
@@ -241,7 +247,7 @@ export default function RepoView({
                   file={{ path: history.entry.path, oldPath: history.entry.oldPath, status: history.entry.status }}
                   backLabel={t.fileHistory.backToList}
                   backHint={t.fileHistory.backToListHint}
-                  onClose={() => setHistory({ file: history.file, entry: null })}
+                  onClose={() => setHistory({ ...history, entry: null })}
                 />
               )}
               {openFile && selectedCommit && !rebasing && (
@@ -311,6 +317,15 @@ export default function RepoView({
               refreshKey={graphKey}
               selectedPath={openFile?.path ?? null}
               onSelectFile={setOpenFile}
+              onFileHistory={
+                rebasing
+                  ? undefined
+                  : (file) => {
+                      setOpenFile(null);
+                      setOpenWorkingFile(null);
+                      setHistory({ file: file.path, from: selectedCommit, entry: null });
+                    }
+              }
               onStashPopped={() => {
                 closeCommit(); // the stash is gone; the right panel shows the restored changes
                 reload();
@@ -333,7 +348,7 @@ export default function RepoView({
               if (rebasing) return;
               setOpenFile(null);
               setOpenWorkingFile(null);
-              setHistory({ file, entry: null });
+              setHistory({ file, from: null, entry: null });
             }}
             onCommitted={() => {
               setOpenWorkingFile(null); // what was committed no longer has a working diff

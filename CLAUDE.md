@@ -263,7 +263,9 @@ app rename so users keep their data. Don't change it casually.
   really have unstaged changes, never for conflicted files, always after a confirmation. Single-file **Stash**
   runs `git --literal-pathspecs stash push --include-untracked -- <paths>`: libgit2's path-limited `stash_save_ext` also
   cleans the files that were NOT selected, and git2 cannot set its message, so don't use it.
-- **File history** (*File history* in the Changes file menu, not for new files): `RepoView` keeps `history: { file, entry }`. `FileHistory` (centre, `center-pane`,
+- **File history** (*File history* in the Changes file menu, not for new files, and in the file menu of `CommitDetail`, which then passes `from` = the selected commit so
+  the log starts there: `get_file_history(path, file, from)` takes only a hex id, validated with `Oid::from_str` before it reaches git; no menu for stash files or during a rebase):
+  `RepoView` keeps `history: { file, from, entry }`. `FileHistory` (centre, `center-pane`,
   stays mounted but `hidden` while a commit's diff is open so the scroll position survives; its Escape is off then via `active`) lists
   `get_file_history`; a click sets `entry` and shows the existing `FileDiff` with `source` = that commit and the path *as it was in that commit*
   (+ `oldPath` for renames), with `backLabel`/`backHint` overriding the back button. Uses system git (`--follow` is not available in libgit2) with

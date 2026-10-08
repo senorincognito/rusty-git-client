@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getCommitDetail, type CommitDetail as CommitDetailData, type CommitFile } from "@/api/commit";
 import { popStash } from "@/api/stash";
+import ContextMenu from "@/components/ContextMenu";
 import FileBadge from "@/components/FileBadge";
 import { followSelection } from "@/hooks/followSelection";
 import { useArrowKeys } from "@/hooks/useArrowKeys";
@@ -21,6 +22,7 @@ export default function CommitDetail({
   refreshKey = 0,
   selectedPath,
   onSelectFile,
+  onFileHistory,
   onStashPopped,
   onClose,
 }: {
@@ -30,6 +32,8 @@ export default function CommitDetail({
   /** The file currently open in the centre view, if any. */
   selectedPath: string | null;
   onSelectFile: (file: CommitFile) => void;
+  /** Right-click > File history: the commits that changed the file, starting at this commit. Without it there is no menu. */
+  onFileHistory?: (file: CommitFile) => void;
   /** The stash shown here was applied and removed, so there is nothing left to show. */
   onStashPopped: () => void;
   onClose: () => void;
@@ -40,6 +44,7 @@ export default function CommitDetail({
   const [popping, setPopping] = useState(false);
   const [popError, setPopError] = useState<string | null>(null);
   const startDetail = useLatestRequest();
+  const [menu, setMenu] = useState<{ x: number; y: number; file: CommitFile } | null>(null);
 
   useEffect(() => {
     const isCurrent = startDetail();
@@ -139,11 +144,18 @@ export default function CommitDetail({
               {detail.files.map((f) => (
                 <li
                   key={f.path}
-                  className={"selectable" + (f.path === selectedPath ? " selected" : "")}
+                  className={
+                    "selectable" + (f.path === selectedPath ? " selected" : "") + (f.path === menu?.file.path ? " ctx" : "")
+                  }
                   title={f.oldPath ? `${f.oldPath} → ${f.path}` : f.path}
                   role="button"
                   tabIndex={0}
                   onClick={() => onSelectFile(f)}
+                  onContextMenu={(e) => {
+                    if (!onFileHistory) return; // nothing to offer: leave the right-click alone
+                    e.preventDefault();
+                    setMenu({ x: e.clientX, y: e.clientY, file: f });
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
@@ -163,6 +175,22 @@ export default function CommitDetail({
             )}
           </section>
         </>
+      )}
+
+      {menu && onFileHistory && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+          items={[
+            {
+              label: t.commitDetail.fileHistory,
+              disabled: detail?.stash != null,
+              title: detail?.stash ? t.commitDetail.fileHistoryStash : t.commitDetail.fileHistoryHint,
+              onClick: () => onFileHistory(menu.file),
+            },
+          ]}
+        />
       )}
 
       {/* Like the Stash button in the staging panel: the action sits at the bottom. */}

@@ -13,6 +13,7 @@ const dateFmt = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "sh
 export default function FileHistory({
   path,
   file,
+  from,
   refreshKey,
   active,
   openId,
@@ -21,6 +22,8 @@ export default function FileHistory({
 }: {
   path: string;
   file: string;
+  /** Start at this commit instead of the newest one (the file's name is then the one in that commit). */
+  from: { id: string; shortId: string } | null;
   refreshKey: number;
   /** False while a commit's diff covers this view: Escape then belongs to the diff. */
   active: boolean;
@@ -34,13 +37,13 @@ export default function FileHistory({
 
   useEffect(() => {
     let current = true;
-    getFileHistory(path, file)
+    getFileHistory(path, file, from?.id ?? null)
       .then((e) => current && (setEntries(e), setError(null)))
       .catch((e) => current && setError(String(e)));
     return () => {
       current = false;
     };
-  }, [path, file, refreshKey]);
+  }, [path, file, from?.id, refreshKey]);
 
   // Escape returns to the graph, unless it already means something else (a field, a menu, a dialog).
   useEffect(() => {
@@ -62,7 +65,7 @@ export default function FileHistory({
         <button className="ghost" onClick={onClose} title={t.fileHistory.backHint}>
           {t.fileHistory.back}
         </button>
-        <span className="fh-title">{t.fileHistory.title}</span>
+        <span className="fh-title">{from ? t.fileHistory.titleFrom(from.shortId) : t.fileHistory.title}</span>
         <span className="fh-path" title={file}>
           {file}
         </span>

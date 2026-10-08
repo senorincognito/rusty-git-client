@@ -168,6 +168,9 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   author and date. The history follows the file across renames. Click a commit to see exactly what it changed in the file, in the usual diff view
   (**Back to file history** or Esc returns to the list at the same scroll position; Esc in the list returns to the graph). A file that is new and
   not committed yet has no history, so the item is greyed out.
+- The same **File history** item is in the right-click menu of a file in a commit's file list (right panel). The history then starts at exactly that commit and
+  leaves out every later change to the file (the title says "File history up to <id>"); the file is followed back across renames from the name it had in that commit.
+  Not offered for stash files, and not while the interactive rebase screen is open.
 
 ## Fast-forward
 - Right-click a **local branch** and choose **Fast-forward <current> to <branch>**, or right-click a **commit** in the graph and choose
