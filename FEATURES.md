@@ -59,7 +59,8 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   place (added lines in green with `+`, removed lines in red with `-`, old and new line
   numbers). A **Full file** switch toggles between the whole file and just the changed hunks
   with three lines of context. Binary and very large files are not previewed, and diffs are
-  capped at 20,000 lines. **Back to graph** returns to the commit graph exactly where you left it.
+  capped at 20,000 lines. In the full-file view, green and red marks along the scrollbar show where the added and removed lines are
+  (the scrollbar itself still works as usual). **Back to graph** returns to the commit graph exactly where you left it.
 - Click a file in the staging panel (Unstaged or Staged): the centre area shows its diff the same
   way. Unstaged compares the index with the file on disk (untracked files show as all added),
   Staged compares HEAD with the index. It refreshes when you edit, stage or return to the window,

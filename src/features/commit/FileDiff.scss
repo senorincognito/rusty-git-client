@@ -50,6 +50,15 @@
   }
 }
 
+// The scrolling body plus the change markers drawn over its scrollbar.
+.fd-main {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .fd-body {
   flex: 1;
   min-height: 0;
@@ -197,4 +206,30 @@
   color: $danger;
   background: $removed-tint;
   border-bottom: 1px solid $border;
+}
+
+// Where the changed lines are, along the vertical scrollbar. Narrower than the scrollbar so its thumb stays visible
+// around them, and transparent to the mouse so the scrollbar keeps working.
+.fd-marks {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 10px;
+  pointer-events: none;
+
+  span {
+    position: absolute;
+    left: 3px;
+    right: 3px;
+    min-height: 3px; // a single changed line in a long file would vanish otherwise
+    border-radius: 1px;
+
+    &.add {
+      background: $added;
+    }
+
+    &.del {
+      background: $danger;
+    }
+  }
 }

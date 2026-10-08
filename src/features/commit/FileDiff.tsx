@@ -154,6 +154,20 @@ export default function FileDiff({
     return out;
   }, [diff]);
 
+  // Overview of the changes for the scrollbar: runs of added or removed rows, as fractions of the whole list. Only
+  // useful in the full-file view, where the changes sit between long stretches of unchanged code.
+  const marks = useMemo(() => {
+    const out: { kind: "add" | "del"; from: number; len: number }[] = [];
+    rows.forEach((row, i) => {
+      if (row.type !== "line" || (row.line.kind !== "add" && row.line.kind !== "del")) return;
+      const prev = out[out.length - 1];
+      if (prev && prev.kind === row.line.kind && prev.from + prev.len === i) prev.len += 1;
+      else out.push({ kind: row.line.kind, from: i, len: 1 });
+    });
+    return out;
+  }, [rows]);
+  const showMarks = full && marks.length > 0 && rows.length * ROW_H > viewH;
+
   // Hunks can be moved only in text diffs that are complete and not mid-conflict. Untracked files
   // (unstaged "new") have no index version to build from; stage them whole from the list.
   const hunkable = diff !== null && !diff.binary && !diff.truncated && file.status !== "conflicted";
@@ -231,6 +245,7 @@ export default function FileDiff({
       </header>
       {actionError && <p className="fd-error">{actionError}</p>}
 
+      <div className="fd-main">
       <div
         className="fd-body"
         ref={scroller}
@@ -311,6 +326,18 @@ export default function FileDiff({
             })}
           </div>
         )}
+      </div>
+      {showMarks && (
+        <div className="fd-marks" style={{ height: viewH }} aria-hidden="true">
+          {marks.map((m) => (
+            <span
+              key={m.from}
+              className={m.kind}
+              style={{ top: `${(m.from / rows.length) * 100}%`, height: `${(m.len / rows.length) * 100}%` }}
+            />
+          ))}
+        </div>
+      )}
       </div>
     </section>
   );

@@ -274,6 +274,8 @@ app rename so users keep their data. Don't change it casually.
   the index blob from the HEAD-to-index diff with that hunk reverted to HEAD's lines; if the file is not in HEAD
   (new file, or a branch without commits) and nothing is left, the index entry is removed, and a staged deletion
   is re-added from HEAD. The file on disk is never touched. Discarding a staged hunk is not offered.
+- In the full-file view `FileDiff` draws change markers over the vertical scrollbar (`.fd-marks`: runs of add/del rows as percentages of the
+  virtual list, `pointer-events: none`, narrower than the 10px scrollbar so the thumb stays visible; shown only when the list scrolls).
 - Commit detail diffs are against the **first parent**; renames detected; 2000-file and 20 000-line caps;
   binary/over-5 MB files are not previewed. The diff view has a "Full file" switch (default on).
 
