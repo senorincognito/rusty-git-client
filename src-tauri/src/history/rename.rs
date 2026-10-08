@@ -67,7 +67,10 @@ pub async fn get_rename_info(path: String, id: String) -> Result<RenameInfo, Str
 /// Renames a commit on the current branch. Returns the new id of that commit.
 #[tauri::command]
 pub async fn rename_commit_message(path: String, id: String, message: String) -> Result<String, String> {
-    blocking(path, move |r| rename_commit(r, &id, &message).map(|o| o.to_string())).await
+    crate::undo::recorded(&path.clone(), "Rename commit", crate::undo::Kind::Switch, || {
+        blocking(path, move |r| rename_commit(r, &id, &message).map(|o| o.to_string()))
+    })
+    .await
 }
 
 #[cfg(test)]

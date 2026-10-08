@@ -120,7 +120,10 @@ pub async fn get_drop_info(path: String, id: String) -> Result<DropInfo, String>
 /// Drops the current branch's latest commit (and its changes). Needs a clean working directory.
 #[tauri::command]
 pub async fn drop_latest_commit(path: String, id: String) -> Result<(), String> {
-    blocking(path, move |r| drop_commit(r, &id)).await
+    crate::undo::recorded(&path.clone(), "Drop commit", crate::undo::Kind::Switch, || {
+        blocking(path, move |r| drop_commit(r, &id))
+    })
+    .await
 }
 
 #[cfg(test)]

@@ -58,9 +58,13 @@ fn fast_forward(repo: &Repository, target: &str) -> Result<usize, String> {
 /// Fast-forwards the checked-out branch to `target`; resolves to the number of commits gained.
 #[tauri::command]
 pub async fn fast_forward_cmd(path: String, target: String) -> Result<usize, String> {
-    tauri::async_runtime::spawn_blocking(move || fast_forward(&Repository::discover(&path).map_err(err)?, &target))
-        .await
-        .map_err(|e| e.to_string())?
+    let label = format!("Fast-forward to {}", crate::undo::short_ref(&target));
+    crate::undo::recorded(&path.clone(), label, crate::undo::Kind::Switch, || async move {
+        tauri::async_runtime::spawn_blocking(move || fast_forward(&Repository::discover(&path).map_err(err)?, &target))
+            .await
+            .map_err(|e| e.to_string())?
+    })
+    .await
 }
 
 #[cfg(test)]

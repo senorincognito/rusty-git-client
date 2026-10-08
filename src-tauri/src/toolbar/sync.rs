@@ -398,7 +398,7 @@ pub async fn git_fetch(path: String) -> Result<String, String> {
 
 #[tauri::command]
 pub async fn git_pull(path: String) -> Result<String, String> {
-    blocking(move || pull(&path)).await
+    crate::undo::recorded(&path.clone(), "Pull", crate::undo::Kind::Switch, || blocking(move || pull(&path))).await
 }
 
 #[tauri::command]
@@ -415,7 +415,9 @@ pub async fn get_divergence(path: String) -> Result<Divergence, String> {
 /// Pull by merging ("merge") or rebasing ("rebase"), for branches that can't fast-forward.
 #[tauri::command]
 pub async fn git_pull_with(path: String, mode: String) -> Result<String, String> {
-    blocking(move || pull_with(&path, &mode)).await
+    let label = format!("Pull ({mode})");
+    crate::undo::recorded(&path.clone(), label, crate::undo::Kind::Switch, || blocking(move || pull_with(&path, &mode)))
+        .await
 }
 
 #[tauri::command]

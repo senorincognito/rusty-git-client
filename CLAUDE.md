@@ -64,6 +64,7 @@ the module path to be visible from the crate root.
 | `sidebar/stash.rs` | `features/sidebar`, `features/changes` | `get_stashes`, `create_stash` (stashes everything incl. untracked), `stash_paths_cmd` (selected files, via system git), `pop_stash_cmd`, `apply_stash_cmd`, `drop_stash_cmd`; helpers `stash_index_of`, `untracked_tree` |
 | `toolbar/sync.rs` | `features/toolbar` | fetch / pull / push / force push / auto-fetch / diverged pull; `run_git`, `run_git_with` |
 | `auth/mod.rs` | `features/auth` | credential prompts: `GIT_ASKPASS`/`SSH_ASKPASS` script, loopback socket, `credentials-request` event, `answer_credentials` |
+| `undo/mod.rs` | `features/toolbar/UndoButtons` | the undo journal: `recorded(path, label, kind, || op)` wraps a command, `get_undo_state`, `undo_cmd`, `redo_cmd` |
 | `terminal/mod.rs` | `features/terminal` | PTY sessions (`portable-pty`) feeding the xterm.js panel |
 
 Modules reach each other by full path (`crate::toolbar::sync::run_git`, `crate::changes::status_of`,
@@ -140,7 +141,7 @@ app rename so users keep their data. Don't change it casually.
   (`input`/`textarea`/`select`/contenteditable; xterm's hidden textarea counts) and must do nothing while a
   `.ctxmenu` or `.modal-backdrop` is open, because those handle their own Escape. `FileDiff` is the model.
   Existing shortcuts: Esc (close diff / menus / dialogs / editors), Ctrl+\` terminal (`RepoView`),
-  Ctrl/Cmd+Enter commit and rename-update, arrow keys on resize handles, ↑/↓ in the commit graph (`Graph`, `keyboard` prop: off while a diff, the rename panel or the
+  Ctrl/Cmd+Enter commit and rename-update, Ctrl/Cmd+Z / +Shift+Z (Ctrl+Y) undo / redo (`UndoButtons`, skips editable targets, menus, dialogs), arrow keys on resize handles, ↑/↓ in the commit graph (`Graph`, `keyboard` prop: off while a diff, the rename panel or the
   rebase screen covers it) and through the right panel's files while a diff is open (`CommitDetail`, `Changes`), all via
   the `useArrowKeys` hook (plain arrows only; skips fields, menus and dialogs), ↑/↓ (and Ctrl/Cmd+↑/↓ to move) in the
   interactive rebase (`InteractiveRebase`, window-level; skips editable targets, menus, popups and `diffOpen`). Keep the shortcuts table in `FEATURES.md` in sync.
@@ -164,6 +165,17 @@ app rename so users keep their data. Don't change it casually.
   status, no network check) opens `PushDialog` (same two commit lists as the pull dialog, `getDivergence`) instead of pushing: *Force push*
   (runs the same lease push; the dialog is its confirmation) or *Cancel* (default focus). A push rejected because the remote moved since the
   last fetch still shows git's own message, and a force push then fails on the lease as intended.
+- **Undo / Redo** (`undo/mod.rs`, `UndoButtons` in the title bar + Ctrl/Cmd+Z): every command that changes the repository is wrapped in `undo::recorded(&path, label, Kind, || ...)`
+  (the closure starts the real work *after* the "before" snapshot; the entry is pushed only if the op succeeded and the state differs). A `Snapshot` = HEAD (branch name or
+  detached id), all local branch tips, the stash list (id + message), and for some kinds the index and the whole working directory as **trees** (built in memory with
+  `update_all` + `add_all`, so untracked files are included, ignored ones not; objects stay in the odb). `Kind` decides what is captured and restored: `Keep` (refs only: commit,
+  amend, soft reset, branch create/rename/delete, stash drop; undoing a commit leaves the content staged because the index is left alone), `Switch` (refs + safe checkout of the old
+  tree, never overwriting newer edits: merge, ff, pull, rebase family, rename, drop, checkout), `Index` (+ index tree: stage/unstage, hunks, mixed reset), `Full` (+ index and workdir trees,
+  restored by `restore_workdir` which rewrites changed files and deletes added ones: discard, stash create/pop/apply, hard reset). Undo/Redo first compare the *current* snapshot with the
+  entry's expected one; any difference (the terminal did something) = nothing happens, the journal for that repo is cleared. Stashes are restored by dropping them all and
+  `git stash store -m <message> <id>` in order (the stash commits outlive a drop). The journal is in memory per repo (`JOURNALS`, keyed by the git dir), max 50 steps; a new action clears
+  Redo. Not recorded: fetch, push, force push, remote edits (they can't be taken back locally). To make a new command undoable wrap it and choose the `Kind`; add a label that reads like
+  "Undo: <label>". Untested in the running UI; the journal logic itself is unit-tested with real repositories.
 - **Credential prompts** (`auth/mod.rs`, `features/auth/CredentialPrompt`, mounted in `App`): `run_git` (manual operations) sets
   `GIT_ASKPASS`/`SSH_ASKPASS` (+`SSH_ASKPASS_REQUIRE=force`) to a temp-dir script (not the app data dir: git splits the command at the
   space in `Application Support`) that runs this exe as `--askpass <prompt>` (handled first thing in `run()`); it asks the app over a

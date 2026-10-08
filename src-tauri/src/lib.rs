@@ -7,6 +7,7 @@ mod repo;
 mod sidebar;
 mod terminal;
 mod toolbar;
+mod undo;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -25,6 +26,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             auth::answer_credentials,
+            undo::get_undo_state,
+            undo::undo_cmd,
+            undo::redo_cmd,
             commit::file_history::get_file_history,
             graph::fast_forward::fast_forward_cmd,
             graph::merge::merge_branch_cmd,

@@ -378,7 +378,10 @@ pub async fn apply_rebase_cmd(
     steps: Vec<RebaseStep>,
     order: Vec<String>,
 ) -> Result<(), String> {
-    blocking(path, move |r| apply_rebase_ordered(r, &base_id, &head_id, &steps, &order)).await
+    crate::undo::recorded(&path.clone(), "Interactive rebase", crate::undo::Kind::Switch, || {
+        blocking(path, move |r| apply_rebase_ordered(r, &base_id, &head_id, &steps, &order))
+    })
+    .await
 }
 
 #[cfg(test)]

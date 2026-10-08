@@ -54,7 +54,11 @@ fn merge(path: &str, target: &str) -> Result<MergeOutcome, String> {
 /// Merges the branch `target` (full ref name) into the checked-out branch.
 #[tauri::command]
 pub async fn merge_branch_cmd(path: String, target: String) -> Result<MergeOutcome, String> {
-    tauri::async_runtime::spawn_blocking(move || merge(&path, &target)).await.map_err(|e| e.to_string())?
+    let label = format!("Merge {}", crate::undo::short_ref(&target));
+    crate::undo::recorded(&path.clone(), label, crate::undo::Kind::Switch, || async move {
+        tauri::async_runtime::spawn_blocking(move || merge(&path, &target)).await.map_err(|e| e.to_string())?
+    })
+    .await
 }
 
 #[cfg(test)]

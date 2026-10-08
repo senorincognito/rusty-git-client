@@ -236,19 +236,31 @@ async fn blocking(
 /// Stages one hunk of a file's unstaged changes. `block_id` is the hunk's fingerprint from the diff.
 #[tauri::command]
 pub async fn stage_hunk_cmd(path: String, file: String, block: usize, block_id: String) -> Result<(), String> {
-    blocking(path, move |r| stage_hunk(r, &file, block, &block_id)).await
+    let label = format!("Stage a hunk of {}", crate::undo::describe_paths(std::slice::from_ref(&file)));
+    crate::undo::recorded(&path.clone(), label, crate::undo::Kind::Index, || {
+        blocking(path, move |r| stage_hunk(r, &file, block, &block_id))
+    })
+    .await
 }
 
 /// Takes one hunk of a file's staged changes out of the staging area again.
 #[tauri::command]
 pub async fn unstage_hunk_cmd(path: String, file: String, block: usize, block_id: String) -> Result<(), String> {
-    blocking(path, move |r| unstage_hunk(r, &file, block, &block_id)).await
+    let label = format!("Unstage a hunk of {}", crate::undo::describe_paths(std::slice::from_ref(&file)));
+    crate::undo::recorded(&path.clone(), label, crate::undo::Kind::Index, || {
+        blocking(path, move |r| unstage_hunk(r, &file, block, &block_id))
+    })
+    .await
 }
 
 /// Discards one hunk of a file's unstaged changes (not undoable).
 #[tauri::command]
 pub async fn discard_hunk_cmd(path: String, file: String, block: usize, block_id: String) -> Result<(), String> {
-    blocking(path, move |r| discard_hunk(r, &file, block, &block_id)).await
+    let label = format!("Discard a hunk of {}", crate::undo::describe_paths(std::slice::from_ref(&file)));
+    crate::undo::recorded(&path.clone(), label, crate::undo::Kind::Full, || {
+        blocking(path, move |r| discard_hunk(r, &file, block, &block_id))
+    })
+    .await
 }
 
 #[cfg(test)]

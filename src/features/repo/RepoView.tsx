@@ -21,6 +21,7 @@ import Sidebar from "@/features/sidebar/Sidebar";
 import TerminalPanel from "@/features/terminal/TerminalPanel";
 import BranchButton from "@/features/toolbar/BranchButton";
 import SyncBar from "@/features/toolbar/SyncBar";
+import UndoButtons from "@/features/toolbar/UndoButtons";
 import { t } from "@/i18n";
 import { describeReset } from "./describeReset";
 import "./RepoView.scss";
@@ -202,6 +203,17 @@ export default function RepoView({
           {repo.head ?? t.repo.noCommits}
         </span>
         <BranchButton path={path} onCreated={reload} />
+        <UndoButtons
+          path={path}
+          refreshKey={graphKey}
+          disabled={rebasing !== null}
+          onDone={() => {
+            closeCommit(); // the selected commit may be gone now
+            setOpenWorkingFile(null);
+            setHistory(null);
+            reload();
+          }}
+        />
         <SyncBar path={path} refreshKey={graphKey} onFetchError={setFetchError} />
         <button
           className="syncbtn stashbtn"

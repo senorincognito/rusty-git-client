@@ -185,6 +185,19 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   (the message says by how much) or uncommitted changes are in the way, an error explains why and nothing changes. No confirmation:
   nothing is lost.
 
+## Undo and Redo
+- The **↶ Undo** and **↷ Redo** buttons in the title bar (after the Branch button) take back and repeat what you did in the app, one step at a time (the last
+  50). Hover a button to see what it would take back, e.g. "Undo: Merge feature". Also `Ctrl`/`Cmd` + `Z` and `Ctrl`/`Cmd` + `Shift` + `Z` (or `Ctrl` + `Y`).
+- What can be undone: **commit** and **amend** (the changes are staged again), **merge**, **fast-forward**, **pull**, **reset** (a hard reset also brings back the
+  uncommitted work it threw away), **interactive rebase**, **rename** and **drop commit**, **check out**, **create / rename / delete branch**, every **stash** action
+  (create, apply, pop, delete: the files and the stash list go back), **stage / unstage** (files and hunks) and **discard** (files and hunks, including deleted
+  untracked files).
+- Undo only acts while the repository is exactly as that step left it. If something else changed it in the meantime (the terminal, another program), nothing is
+  touched, you are told why, and the undo history is cleared. Steps that move files (merge, fast-forward, checkout...) never overwrite edits you made since: Undo stops
+  and says so; commit, stash or discard them and try again. Doing something new ends the Redo history.
+- Not undoable: fetch, push and force push, and anything that edits remotes (add, remove, change URL, rename or delete remote branches). The history lives only
+  while the app is open and is kept per repository. Undo is off while the interactive rebase screen is open.
+
 ## Resetting to a commit
 - Right-click any commit, point at **Reset to this commit** (a menu group: its submenu opens to the right on
   hover, click or the right arrow key) and choose **Soft**, **Mixed** or **Hard** (the commits of other lines of
@@ -273,6 +286,7 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
 | `Esc` | Close the diff in the centre (same as **Back**); also closes menus and dialogs and cancels inline editors |
 | `Ctrl` + `` ` `` | Show or hide the terminal |
 | `Ctrl`/`Cmd` + `Enter` | Commit (staging panel) or Update (rename dialog) |
+| `Ctrl`/`Cmd` + `Z` / `Ctrl`/`Cmd` + `Shift` + `Z` (or `Ctrl` + `Y`) | Undo / Redo the last action (not inside text fields or the terminal) |
 | `Enter` / `Space` | Open the focused file row; `Enter` confirms an inline branch rename |
 | `←` / `→` on a panel's resize handle | Resize it (hold `Shift` for bigger steps) |
 | `↑` / `↓` while a file's diff is open | Open the file above / below in the right panel's list (a commit's files, or unstaged then staged files) |

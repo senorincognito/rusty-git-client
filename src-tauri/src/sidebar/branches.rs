@@ -124,18 +124,28 @@ fn create_and_checkout(repo: &Repository, name: &str) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn rename_local_branch(path: String, name: String, new_name: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        rename_branch(&Repository::discover(&path).map_err(err)?, &name, &new_name)
+    let label = format!("Rename branch {name} to {}", new_name.trim());
+    crate::undo::recorded(&path.clone(), label, crate::undo::Kind::Keep, || async move {
+        tauri::async_runtime::spawn_blocking(move || {
+            rename_branch(&Repository::discover(&path).map_err(err)?, &name, &new_name)
+        })
+        .await
+        .map_err(|e| e.to_string())?
     })
     .await
-    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn create_branch(path: String, name: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || create_and_checkout(&Repository::discover(&path).map_err(err)?, &name))
+    let label = format!("Create branch {}", name.trim());
+    crate::undo::recorded(&path.clone(), label, crate::undo::Kind::Keep, || async move {
+        tauri::async_runtime::spawn_blocking(move || {
+            create_and_checkout(&Repository::discover(&path).map_err(err)?, &name)
+        })
         .await
         .map_err(|e| e.to_string())?
+    })
+    .await
 }
 
 /// Switches to an existing local branch, like `git switch`. Safe: fails instead of
@@ -163,9 +173,13 @@ fn checkout_branch(repo: &Repository, name: &str) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn checkout_local_branch(path: String, name: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || checkout_branch(&Repository::discover(&path).map_err(err)?, &name))
-        .await
-        .map_err(|e| e.to_string())?
+    let label = format!("Check out {name}");
+    crate::undo::recorded(&path.clone(), label, crate::undo::Kind::Switch, || async move {
+        tauri::async_runtime::spawn_blocking(move || checkout_branch(&Repository::discover(&path).map_err(err)?, &name))
+            .await
+            .map_err(|e| e.to_string())?
+    })
+    .await
 }
 
 /// Checks out the remote branch `remote/name` as a local branch of the same name that tracks it, like
@@ -200,11 +214,15 @@ fn checkout_remote(repo: &Repository, remote: &str, name: &str) -> Result<(), St
 
 #[tauri::command]
 pub async fn checkout_remote_branch(path: String, remote: String, name: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        checkout_remote(&Repository::discover(&path).map_err(err)?, &remote, &name)
+    let label = format!("Check out {remote}/{name}");
+    crate::undo::recorded(&path.clone(), label, crate::undo::Kind::Switch, || async move {
+        tauri::async_runtime::spawn_blocking(move || {
+            checkout_remote(&Repository::discover(&path).map_err(err)?, &remote, &name)
+        })
+        .await
+        .map_err(|e| e.to_string())?
     })
     .await
-    .map_err(|e| e.to_string())?
 }
 
 /// Commits on `name` that are neither in the current HEAD nor on its upstream, i.e. work
@@ -243,11 +261,15 @@ pub async fn count_unmerged_commits(path: String, name: String) -> Result<usize,
 /// Deletes a local branch. The checked-out branch is refused.
 #[tauri::command]
 pub async fn delete_local_branch(path: String, name: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        delete_branch_checked(&Repository::discover(&path).map_err(err)?, &name)
+    let label = format!("Delete branch {name}");
+    crate::undo::recorded(&path.clone(), label, crate::undo::Kind::Keep, || async move {
+        tauri::async_runtime::spawn_blocking(move || {
+            delete_branch_checked(&Repository::discover(&path).map_err(err)?, &name)
+        })
+        .await
+        .map_err(|e| e.to_string())?
     })
     .await
-    .map_err(|e| e.to_string())?
 }
 
 #[cfg(test)]

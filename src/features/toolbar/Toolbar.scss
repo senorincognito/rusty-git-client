@@ -152,3 +152,10 @@
     font-size: 12px;
   }
 }
+
+// Undo and Redo, side by side between the branch button and the sync buttons.
+.undobtns {
+  display: flex;
+  gap: 4px;
+  margin-left: 6px;
+}

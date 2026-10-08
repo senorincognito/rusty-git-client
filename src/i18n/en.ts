@@ -80,6 +80,17 @@ export const en = {
     forcePush: "Force push",
   },
 
+  undo: {
+    undo: "↶ Undo",
+    redo: "↷ Redo",
+    undoTitle: "Undo",
+    redoTitle: "Redo",
+    nothingToUndo: "Nothing to undo",
+    nothingToRedo: "Nothing to redo",
+    undoHint: (label: string) => `Undo: ${label} (Ctrl/Cmd+Z)`,
+    redoHint: (label: string) => `Redo: ${label} (Ctrl/Cmd+Shift+Z)`,
+  },
+
   fileHistory: {
     title: "File history",
     titleFrom: (shortId: string) => `File history up to ${shortId}`,

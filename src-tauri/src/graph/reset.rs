@@ -132,7 +132,14 @@ pub async fn get_reset_info(path: String, id: String) -> Result<ResetInfo, Strin
 /// `git reset --soft`, `--mixed` or `--hard` to a commit.
 #[tauri::command]
 pub async fn reset_to_commit(path: String, id: String, mode: String) -> Result<(), String> {
-    blocking(path, move |r| reset_to(r, &id, &mode)).await
+    // Soft keeps the index, mixed rewrites it, hard rewrites the files as well.
+    let kind = match mode.as_str() {
+        "soft" => crate::undo::Kind::Keep,
+        "mixed" => crate::undo::Kind::Index,
+        _ => crate::undo::Kind::Full,
+    };
+    let label = format!("Reset ({mode}) to {}", crate::undo::short_ref(&id));
+    crate::undo::recorded(&path.clone(), label, kind, || blocking(path, move |r| reset_to(r, &id, &mode))).await
 }
 
 #[cfg(test)]

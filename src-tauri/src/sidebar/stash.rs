@@ -180,53 +180,71 @@ pub async fn get_stashes(path: String) -> Result<Vec<StashEntry>, String> {
 /// Stashes all uncommitted changes, with an optional message. Returns the stash commit id.
 #[tauri::command]
 pub async fn create_stash(path: String, message: Option<String>) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let mut repo = Repository::discover(&path).map_err(err)?;
-        save_stash(&mut repo, message.as_deref()).map(|o| o.to_string())
+    crate::undo::recorded(&path.clone(), "Stash changes", crate::undo::Kind::Full, || async move {
+        tauri::async_runtime::spawn_blocking(move || {
+            let mut repo = Repository::discover(&path).map_err(err)?;
+            save_stash(&mut repo, message.as_deref()).map(|o| o.to_string())
+        })
+        .await
+        .map_err(|e| e.to_string())?
     })
     .await
-    .map_err(|e| e.to_string())?
 }
 
 /// Stashes only the given files.
 #[tauri::command]
 pub async fn stash_paths_cmd(path: String, paths: Vec<String>) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || save_stash_paths(&Repository::discover(&path).map_err(err)?, &paths))
+    let label = format!("Stash {}", crate::undo::describe_paths(&paths));
+    crate::undo::recorded(&path.clone(), label, crate::undo::Kind::Full, || async move {
+        tauri::async_runtime::spawn_blocking(move || {
+            save_stash_paths(&Repository::discover(&path).map_err(err)?, &paths)
+        })
         .await
         .map_err(|e| e.to_string())?
+    })
+    .await
 }
 
 /// Applies a stash and removes it from the list. Needs a clean working directory.
 #[tauri::command]
 pub async fn pop_stash_cmd(path: String, id: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let mut repo = Repository::discover(&path).map_err(err)?;
-        pop_stash(&mut repo, &id)
+    crate::undo::recorded(&path.clone(), "Pop stash", crate::undo::Kind::Full, || async move {
+        tauri::async_runtime::spawn_blocking(move || {
+            let mut repo = Repository::discover(&path).map_err(err)?;
+            pop_stash(&mut repo, &id)
+        })
+        .await
+        .map_err(|e| e.to_string())?
     })
     .await
-    .map_err(|e| e.to_string())?
 }
 
 /// Applies a stash and keeps it in the list. Needs a clean working directory.
 #[tauri::command]
 pub async fn apply_stash_cmd(path: String, id: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let mut repo = Repository::discover(&path).map_err(err)?;
-        apply_stash(&mut repo, &id, false)
+    crate::undo::recorded(&path.clone(), "Apply stash", crate::undo::Kind::Full, || async move {
+        tauri::async_runtime::spawn_blocking(move || {
+            let mut repo = Repository::discover(&path).map_err(err)?;
+            apply_stash(&mut repo, &id, false)
+        })
+        .await
+        .map_err(|e| e.to_string())?
     })
     .await
-    .map_err(|e| e.to_string())?
 }
 
 /// Deletes a stash without applying it.
 #[tauri::command]
 pub async fn drop_stash_cmd(path: String, id: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let mut repo = Repository::discover(&path).map_err(err)?;
-        drop_stash(&mut repo, &id)
+    crate::undo::recorded(&path.clone(), "Delete stash", crate::undo::Kind::Keep, || async move {
+        tauri::async_runtime::spawn_blocking(move || {
+            let mut repo = Repository::discover(&path).map_err(err)?;
+            drop_stash(&mut repo, &id)
+        })
+        .await
+        .map_err(|e| e.to_string())?
     })
     .await
-    .map_err(|e| e.to_string())?
 }
 
 #[cfg(test)]

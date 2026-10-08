@@ -250,25 +250,36 @@ pub async fn get_status(path: String) -> Result<Vec<FileChange>, String> {
 
 #[tauri::command]
 pub async fn stage_paths(path: String, paths: Vec<String>) -> Result<(), String> {
-    blocking(path, move |r| stage(r, &paths)).await
+    let label = format!("Stage {}", crate::undo::describe_paths(&paths));
+    crate::undo::recorded(&path.clone(), label, crate::undo::Kind::Index, || blocking(path, move |r| stage(r, &paths)))
+        .await
 }
 
 #[tauri::command]
 pub async fn unstage_paths(path: String, paths: Vec<String>) -> Result<(), String> {
-    blocking(path, move |r| unstage(r, &paths)).await
+    let label = format!("Unstage {}", crate::undo::describe_paths(&paths));
+    crate::undo::recorded(&path.clone(), label, crate::undo::Kind::Index, || {
+        blocking(path, move |r| unstage(r, &paths))
+    })
+    .await
 }
 
 /// Discards the unstaged changes of whole files (untracked files are deleted). Not undoable.
 #[tauri::command]
 pub async fn discard_paths(path: String, paths: Vec<String>) -> Result<(), String> {
-    blocking(path, move |r| discard(r, &paths)).await
+    let label = format!("Discard changes to {}", crate::undo::describe_paths(&paths));
+    crate::undo::recorded(&path.clone(), label, crate::undo::Kind::Full, || blocking(path, move |r| discard(r, &paths)))
+        .await
 }
 
 /// Commits the index, or with `amend` replaces the last commit. Returns the commit id.
 #[tauri::command]
 pub async fn create_commit(path: String, message: String, amend: bool) -> Result<String, String> {
-    blocking(path, move |r| {
-        if amend { amend_head(r, &message) } else { commit_staged(r, &message) }.map(|o| o.to_string())
+    let label = if amend { "Amend commit" } else { "Commit" };
+    crate::undo::recorded(&path.clone(), label, crate::undo::Kind::Keep, || {
+        blocking(path, move |r| {
+            if amend { amend_head(r, &message) } else { commit_staged(r, &message) }.map(|o| o.to_string())
+        })
     })
     .await
 }
