@@ -79,6 +79,8 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   and returns to the staging panel (your draft commit message is kept). The × does the same.
 
 ## Stashes
+- **Stash** in the title bar (between the Fetch/Pull/Push buttons and Terminal; disabled when nothing has changed) opens the same dialog as
+  **Stash…** below.
 - **Stash…** next to the Commit button (disabled when nothing has changed) takes an optional message
   and moves every uncommitted change (staged, unstaged and untracked files; ignored files stay) into a
   new stash, leaving the working directory clean.

@@ -6,9 +6,11 @@ import { confirmDialog, showError, showInfo } from "@/api/dialog";
 import { dropLatestCommit, fastForward, getDropInfo, getResetInfo, mergeBranch, resetToCommit, type ResetMode } from "@/api/history";
 import { openRepo, type RepoInfo } from "@/api/repo";
 import { unwatchRepo, watchRepo } from "@/api/watch";
+import { useWorkingChangeCount } from "@/hooks/useWorkingChangeCount";
 import ResizablePanel from "@/components/ResizablePanel";
 import Changes from "@/features/changes/Changes";
 import CommitDetail from "@/features/commit/CommitDetail";
+import StashDialog from "@/features/changes/StashDialog";
 import FileHistory from "@/features/commit/FileHistory";
 import FileDiff from "@/features/commit/FileDiff";
 import Graph from "@/features/graph/Graph";
@@ -34,6 +36,8 @@ export default function RepoView({
 }) {
   const [graphKey, setGraphKey] = useState(0);
   const [terminalOpen, setTerminalOpen] = useState(false);
+  // The Stash button in the title bar opens the same dialog as the one under the staging lists.
+  const [stashOpen, setStashOpen] = useState(false);
   // Why the last fetch failed (shown as a warning beside "origin"), null while fetching works.
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; shortId: string } | null>(null);
@@ -53,6 +57,7 @@ export default function RepoView({
     entry: HistoryEntry | null;
   } | null>(null);
   const path = repo.path;
+  const changeCount = useWorkingChangeCount(path, graphKey);
 
   // Right-click > Interactive rebase: its screen replaces the sidebar and the graph; the right panel
   // goes back to the working-directory changes.
@@ -172,6 +177,14 @@ export default function RepoView({
         </span>
         <BranchButton path={path} onCreated={reload} />
         <SyncBar path={path} refreshKey={graphKey} onFetchError={setFetchError} />
+        <button
+          className="syncbtn stashbtn"
+          disabled={changeCount === 0}
+          onClick={() => setStashOpen(true)}
+          title={changeCount === 0 ? t.repo.stashNothing : t.changes.stashAllHint}
+        >
+          {t.repo.stash}
+        </button>
         <button
           className={"syncbtn termtoggle" + (terminalOpen ? " active" : "")}
           onClick={() => setTerminalOpen((o) => !o)}
@@ -357,6 +370,18 @@ export default function RepoView({
           />
         </ResizablePanel>
       </div>
+      {stashOpen && (
+        <StashDialog
+          path={path}
+          fileCount={changeCount}
+          onClose={() => setStashOpen(false)}
+          onStashed={() => {
+            setStashOpen(false);
+            setOpenWorkingFile(null); // what was stashed no longer has a working diff
+            reload();
+          }}
+        />
+      )}
       <TerminalPanel path={path} open={terminalOpen} onClose={() => setTerminalOpen(false)} />
     </div>
   );

@@ -396,6 +396,8 @@ export const en = {
     back: "← Repositories",
     detached: "detached @ ",
     noCommits: "(no commits yet)",
+    stash: "Stash",
+    stashNothing: "No uncommitted changes to stash",
     terminal: ">_ Terminal",
     terminalHint: "Toggle terminal (Ctrl+`)",
     dropTitle: "Drop commit",

@@ -248,7 +248,8 @@ app rename so users keep their data. Don't change it casually.
   it counts as selected whenever no commit is selected. It has no context menu. File edits aren't watched, so
   `Graph` also refetches on window focus.
 - **Stash** moves all uncommitted changes, **including untracked files** (not ignored ones), into a stash with an
-  optional message (`Stash…` button beside Commit, `StashDialog`). Stashes are visible in the graph (hollow node
+  optional message (`Stash…` button beside Commit and a *Stash* button in the title bar between `SyncBar` and the terminal toggle, both opening `StashDialog`; the title bar one is
+  owned by `RepoView`, which counts the changes with `useWorkingChangeCount`). Stashes are visible in the graph (hollow node
   off the base commit, `stash@{n}` chip, row `isStash`) and in a left-panel `Stashes` section; clicking either
   opens the stash's `CommitDetail`. **Pop** is a button in that panel's bottom footer (`cd-footer`, mirroring
   the Stash button under the staging lists) and a *Pop stash* item in the right-click menu of a Stashes row

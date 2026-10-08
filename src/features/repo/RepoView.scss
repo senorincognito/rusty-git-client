@@ -26,6 +26,11 @@
   font-size: 12px;
 }
 
+// Stash button between the sync buttons and the terminal toggle.
+.stashbtn {
+  margin-left: 6px;
+}
+
 // Terminal toggle at the right end of the title bar (styled like the toolbar buttons).
 .termtoggle {
   margin-left: 6px;
