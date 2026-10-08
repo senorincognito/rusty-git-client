@@ -37,6 +37,26 @@
   margin-right: auto;
 }
 
+// Previous / next change buttons with a "3 / 7" position.
+.fd-nav {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+
+  button {
+    padding: 0 6px;
+    font-size: 10px;
+  }
+
+  .fd-navpos {
+    margin-left: 4px;
+    min-width: 5ch;
+    font: 12px $font-mono;
+    color: $muted;
+  }
+}
+
 .fd-stats {
   flex: none;
   font: 12px $font-mono;

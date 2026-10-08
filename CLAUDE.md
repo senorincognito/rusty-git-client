@@ -276,6 +276,9 @@ app rename so users keep their data. Don't change it casually.
   is re-added from HEAD. The file on disk is never touched. Discarding a staged hunk is not offered.
 - In the full-file view `FileDiff` draws change markers over the vertical scrollbar (`.fd-marks`: runs of add/del rows as percentages of the
   virtual list, `pointer-events: none`, narrower than the 10px scrollbar so the thumb stays visible; shown only when the list scrolls).
+- `FileDiff` header ▲ / ▼ buttons jump between hunk heading rows (smooth scroll, two rows of context above; "where we are" = scrollTop + 2 rows, so
+  repeated clicks always advance; disabled at the first/last hunk and when the list can't scroll further). No keyboard shortcut: ↑/↓ already move
+  between files while a diff is open.
 - Commit detail diffs are against the **first parent**; renames detected; 2000-file and 20 000-line caps;
   binary/over-5 MB files are not previewed. The diff view has a "Full file" switch (default on).
 

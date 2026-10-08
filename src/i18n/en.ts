@@ -314,6 +314,9 @@ export const en = {
   },
 
   diff: {
+    prevChange: "Previous change",
+    nextChange: "Next change",
+    changePosition: (at: number, total: number) => `${at} / ${total}`,
     closeHint: "Close the diff (Esc)",
     backHint: "Back to the commit graph (Esc)",
     back: "← Back",

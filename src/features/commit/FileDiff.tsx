@@ -166,6 +166,22 @@ export default function FileDiff({
     });
     return out;
   }, [rows]);
+  // Jumping between hunks: the heading rows' offsets. A jump leaves two rows of context above the heading, so
+  // "where we are" is measured two rows below the top edge of the view.
+  const hunkTops = useMemo(() => {
+    const tops: number[] = [];
+    rows.forEach((row, i) => row.type === "hunk" && tops.push(i * ROW_H));
+    return tops;
+  }, [rows]);
+  const CONTEXT = 2 * ROW_H;
+  const maxScroll = Math.max(0, rows.length * ROW_H - viewH);
+  const here = scrollTop + CONTEXT;
+  const nextTop = scrollTop < maxScroll - 1 ? hunkTops.find((top) => top > here) : undefined;
+  const prevTop = scrollTop > 0 ? [...hunkTops].reverse().find((top) => top < here - 1) : undefined;
+  const hunksAbove = hunkTops.filter((top) => top <= here).length;
+  const jumpTo = (top: number | undefined) => {
+    if (top !== undefined) scroller.current?.scrollTo({ top: Math.max(0, top - CONTEXT), behavior: "smooth" });
+  };
   const showMarks = full && marks.length > 0 && rows.length * ROW_H > viewH;
 
   // Hunks can be moved only in text diffs that are complete and not mid-conflict. Untracked files
@@ -235,6 +251,17 @@ export default function FileDiff({
           <span className="fd-stats">
             <span className="add">+{diff.additions}</span> <span className="del">-{diff.deletions}</span>
             {diff.truncated && <span className="muted">{t.diff.firstLines(lines.length)}</span>}
+          </span>
+        )}
+        {hunkTops.length > 0 && (
+          <span className="fd-nav">
+            <button className="ghost" disabled={prevTop === undefined} onClick={() => jumpTo(prevTop)} title={t.diff.prevChange} aria-label={t.diff.prevChange}>
+              ▲
+            </button>
+            <button className="ghost" disabled={nextTop === undefined} onClick={() => jumpTo(nextTop)} title={t.diff.nextChange} aria-label={t.diff.nextChange}>
+              ▼
+            </button>
+            <span className="fd-navpos">{t.diff.changePosition(hunksAbove, hunkTops.length)}</span>
           </span>
         )}
         <label className="switch" title={t.diff.fullFileHint}>
