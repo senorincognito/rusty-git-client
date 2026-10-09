@@ -104,6 +104,8 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   you can apply it again elsewhere. Same rules: clean working directory, conflicts are undone completely.
 - **Right-click a stash in the commit graph** for *Apply stash*, *Pop stash* and *Delete stash* (the other commit actions don't apply to stashes,
   so they are not listed). Apply and Pop are disabled, with a tooltip, while there are uncommitted changes.
+- **Delete all stashes (n)** in the **⋯** menu of the Stashes headline removes every stash at once without applying any, after a confirmation that lists them. It leaves your working
+  directory alone, and one **Undo** brings all the stashes back (until the app is closed).
 - **Delete stash** (right-click the stash in the Stashes list) removes it without applying it, after a confirmation.
   It works with uncommitted changes in the working directory; the stash's changes are lost.
 

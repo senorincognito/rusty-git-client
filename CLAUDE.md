@@ -64,7 +64,7 @@ the module path to be visible from the crate root.
 | `sidebar/branches.rs` | `features/sidebar` | list, create+checkout, checkout, delete, rename (local) |
 | `sidebar/cleanup.rs` | `features/sidebar` | "Clean up merged": `get_merged_branches(path, remote)`, `delete_merged_local` (one undo step), `delete_merged_remote` (`git push <remote> --delete`, not undoable) |
 | `sidebar/remotes.rs` | `features/sidebar` | `get_remotes` (every remote with branches, `isTarget`, tracking count), `add_remote_cmd`, `set_remote_url_cmd`, `delete_remote_cmd`, `set_target_remote`; delete/rename remote branches take a `remote` argument |
-| `sidebar/stash.rs` | `features/sidebar`, `features/changes` | `get_stashes`, `create_stash` (stashes everything incl. untracked), `stash_paths_cmd` (selected files, via system git), `pop_stash_cmd`, `apply_stash_cmd`, `drop_stash_cmd`; helpers `stash_index_of`, `untracked_tree` |
+| `sidebar/stash.rs` | `features/sidebar`, `features/changes` | `get_stashes`, `create_stash` (stashes everything incl. untracked), `stash_paths_cmd` (selected files, via system git), `pop_stash_cmd`, `apply_stash_cmd`, `drop_stash_cmd`, `drop_all_stashes_cmd`; helpers `stash_index_of`, `untracked_tree` |
 | `toolbar/sync.rs` | `features/toolbar` | fetch / pull / push / force push / auto-fetch / diverged pull; `run_git`, `run_git_with` |
 | `auth/mod.rs` | `features/auth` | credential prompts: `GIT_ASKPASS`/`SSH_ASKPASS` script, loopback socket, `credentials-request` event, `answer_credentials` |
 | `undo/mod.rs` | `features/toolbar/UndoButtons` | the undo journal: `recorded(path, label, kind, || op)` wraps a command, `get_undo_state`, `undo_cmd`, `redo_cmd` |
@@ -281,7 +281,7 @@ app rename so users keep their data. Don't change it casually.
   re-stages what was staged). Pop requires a clean working directory (disabled in the UI via
   `useWorkingChangeCount`, enforced in Rust) so a
   conflicting pop can be undone exactly (`restore_clean`) with the stash kept. **Delete stash** (`drop_stash_cmd`, Stashes right-click,
-  confirmation first) just calls `stash_drop` by commit id and needs no clean working directory. **Apply** (`apply_stash_cmd`, `apply_stash(repo, id, remove)`; pop is `apply_stash(.., true)`) is the same
+  confirmation first) just calls `stash_drop` by commit id and needs no clean working directory. **Delete all stashes** (Stashes "⋯" menu, `drop_all_stashes_cmd`) drops position 0 repeatedly; one undo step (`Kind::Keep`, the stash list is restored with `git stash store`); `onAllStashesDropped` closes the right panel if it showed one of them. **Apply** (`apply_stash_cmd`, `apply_stash(repo, id, remove)`; pop is `apply_stash(.., true)`) is the same
   clean-directory apply and conflict undo without the final drop. Both menus offer it: Stashes list and, for `isStash` rows, the graph's context menu (which
   then shows only Apply / Pop / Delete stash, via `RepoView.stashAction`; `hasChanges` disables Apply and Pop).
 - **File context menu** (right-click a row in `Changes`): Unstaged = Stage / Discard / Stash, Staged = Unstage / Stash. Discard

@@ -233,6 +233,30 @@ pub async fn apply_stash_cmd(path: String, id: String) -> Result<(), String> {
     .await
 }
 
+/// Deletes every stash without applying any. Returns how many there were.
+fn drop_all_stashes(repo: &mut Repository) -> Result<usize, String> {
+    let count = list_stashes(repo)?.len();
+    // Always the newest one: the others move up, so the position stays 0.
+    for _ in 0..count {
+        repo.stash_drop(0).map_err(err)?;
+    }
+    Ok(count)
+}
+
+/// Deletes every stash without applying any. One undo step brings them all back.
+#[tauri::command]
+pub async fn drop_all_stashes_cmd(path: String) -> Result<usize, String> {
+    crate::undo::recorded(&path.clone(), "Delete all stashes", crate::undo::Kind::Keep, || async move {
+        tauri::async_runtime::spawn_blocking(move || {
+            let mut repo = Repository::discover(&path).map_err(err)?;
+            drop_all_stashes(&mut repo)
+        })
+        .await
+        .map_err(|e| e.to_string())?
+    })
+    .await
+}
+
 /// Deletes a stash without applying it.
 #[tauri::command]
 pub async fn drop_stash_cmd(path: String, id: String) -> Result<(), String> {
@@ -497,6 +521,27 @@ mod tests {
         let e = apply_stash(&mut repo, &id, false).unwrap_err();
         assert!(e.contains("uncommitted changes"), "{e}");
         assert_eq!(list_stashes(&mut repo).unwrap().len(), 1);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn drop_all_removes_every_stash_and_leaves_the_working_directory_alone() {
+        let (dir, mut repo) = setup("dropall");
+        fs::write(dir.join("a.txt"), "one").unwrap();
+        commit_all(&repo, "base");
+        assert_eq!(drop_all_stashes(&mut repo).unwrap(), 0);
+
+        for (content, message) in [("two", "first"), ("three", "second"), ("four", "third")] {
+            fs::write(dir.join("a.txt"), content).unwrap();
+            save_stash(&mut repo, Some(message)).unwrap();
+        }
+        assert_eq!(list_stashes(&mut repo).unwrap().len(), 3);
+
+        fs::write(dir.join("a.txt"), "work in progress").unwrap();
+        assert_eq!(drop_all_stashes(&mut repo).unwrap(), 3);
+        assert!(list_stashes(&mut repo).unwrap().is_empty());
+        assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), "work in progress");
 
         let _ = fs::remove_dir_all(&dir);
     }

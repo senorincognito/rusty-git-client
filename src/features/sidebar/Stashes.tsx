@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { confirmDialog } from "@/api/dialog";
-import { applyStash, dropStash, getStashes, popStash, type StashEntry } from "@/api/stash";
+import { applyStash, dropAllStashes, dropStash, getStashes, popStash, type StashEntry } from "@/api/stash";
 import ContextMenu from "@/components/ContextMenu";
 import Section from "@/components/Section";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
@@ -20,6 +20,7 @@ export default function Stashes({
   onPopped,
   onApplied,
   onDropped,
+  onAllDropped,
   filter,
 }: {
   path: string;
@@ -33,6 +34,8 @@ export default function Stashes({
   onApplied: () => void;
   /** A stash was deleted without being applied (by its commit id). */
   onDropped: (id: string) => void;
+  /** Every stash was deleted (by their commit ids). */
+  onAllDropped: (ids: string[]) => void;
   /** Only stashes whose message or "stash@{n}" matches are listed. */
   filter: string;
 }) {
@@ -41,6 +44,9 @@ export default function Stashes({
   const [menu, setMenu] = useState<{ x: number; y: number; stash: StashEntry } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
   const [popping, setPopping] = useState(false);
+  // The "⋯" menu in the section's headline.
+  const [sectionMenu, setSectionMenu] = useState<{ x: number; y: number } | null>(null);
+  const closeSectionMenu = useCallback(() => setSectionMenu(null), []);
   const shown = stashes?.filter((s) => matchesFilter(filter, s.message, `stash@{${s.index}}`));
   const workingChanges = useWorkingChangeCount(path, refreshKey);
   const start = useLatestRequest();
@@ -87,6 +93,27 @@ export default function Stashes({
     }
   };
 
+  const dropAll = async () => {
+    if (!stashes || stashes.length === 0) return;
+    const ok = await confirmDialog(
+      t.stashes.deleteAllConfirm(stashes.map((s) => `stash@{${s.index}}  ${s.message}`)),
+      t.stashes.deleteAll(stashes.length),
+      true,
+      t.common.delete,
+    );
+    if (!ok) return;
+    setPopping(true);
+    setError(null);
+    try {
+      await dropAllStashes(path);
+      onAllDropped(stashes.map((s) => s.id));
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setPopping(false);
+    }
+  };
+
   const drop = async (stash: StashEntry) => {
     const ok = await confirmDialog(
       t.stashes.deleteConfirm(`stash@{${stash.index}}`, stash.message),
@@ -108,7 +135,16 @@ export default function Stashes({
   };
 
   return (
-    <Section title={t.stashes.title} resizeKey="stashes" count={shown?.length}>
+    <Section
+      title={t.stashes.title}
+      resizeKey="stashes"
+      count={shown?.length}
+      action={{
+        label: t.stashes.actions,
+        active: sectionMenu !== null,
+        onClick: (r) => (sectionMenu ? closeSectionMenu() : setSectionMenu({ x: r.left, y: r.bottom + 4 })),
+      }}
+    >
       {error && <p className="error side-msg">{error}</p>}
       {stashes?.length === 0 && <p className="muted side-msg">{t.stashes.none}</p>}
       {stashes && stashes.length > 0 && shown?.length === 0 && <p className="muted side-msg">{t.stashes.noMatch}</p>}
@@ -137,6 +173,22 @@ export default function Stashes({
           </li>
         ))}
       </ul>
+      {sectionMenu && (
+        <ContextMenu
+          x={sectionMenu.x}
+          y={sectionMenu.y}
+          onClose={closeSectionMenu}
+          items={[
+            {
+              label: t.stashes.deleteAll(stashes?.length ?? 0),
+              danger: true,
+              disabled: popping || !stashes || stashes.length === 0,
+              title: !stashes || stashes.length === 0 ? t.stashes.deleteAllNone : t.stashes.deleteAllHint,
+              onClick: dropAll,
+            },
+          ]}
+        />
+      )}
       {menu && (
         <ContextMenu
           x={menu.x}

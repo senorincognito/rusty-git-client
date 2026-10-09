@@ -16,6 +16,7 @@ export default function Sidebar({
   onStashPopped,
   onStashApplied,
   onStashDropped,
+  onAllStashesDropped,
   onFastForward,
   onMerge,
 }: {
@@ -33,6 +34,8 @@ export default function Sidebar({
   onStashApplied: () => void;
   /** A stash was deleted from the list (by its commit id). */
   onStashDropped: (id: string) => void;
+  /** Every stash was deleted from the list (by their commit ids). */
+  onAllStashesDropped: (ids: string[]) => void;
   /** Fast-forward the checked-out branch to this commit id or full ref name. */
   onFastForward: (target: string) => void;
   /** Merge the branch (full ref name, display name) into the checked-out branch. */
@@ -76,6 +79,7 @@ export default function Sidebar({
           onPopped={onStashPopped}
           onApplied={onStashApplied}
           onDropped={onStashDropped}
+          onAllDropped={onAllStashesDropped}
         />
       </nav>
     </ResizablePanel>

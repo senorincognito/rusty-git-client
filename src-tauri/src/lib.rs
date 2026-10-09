@@ -80,6 +80,7 @@ pub fn run() {
             sidebar::stash::get_stashes,
             sidebar::stash::pop_stash_cmd,
             sidebar::stash::stash_paths_cmd,
+            sidebar::stash::drop_all_stashes_cmd,
             sidebar::stash::drop_stash_cmd,
             toolbar::sync::get_divergence,
             toolbar::sync::get_sync_status,

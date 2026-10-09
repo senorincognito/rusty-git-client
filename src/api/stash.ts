@@ -42,3 +42,6 @@ export const stashPaths = (path: string, paths: string[]) => invoke<void>("stash
  * working directory; an apply that conflicts is undone and the rejection explains.
  */
 export const applyStash = (path: string, id: string) => invoke<void>("apply_stash_cmd", { path, id });
+
+/** Deletes every stash without applying any (git stash clear). Resolves to how many there were. */
+export const dropAllStashes = (path: string) => invoke<number>("drop_all_stashes_cmd", { path });

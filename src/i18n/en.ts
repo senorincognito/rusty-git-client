@@ -281,7 +281,20 @@ export const en = {
     delete: "Delete stash",
     deleteHint: "Remove this stash without applying it (asks first)",
     deleteConfirm: (ref: string, message: string) =>
-      `Delete ${ref} "${message}"?\n\nIts changes are not applied, and they are lost: git has no undo for this.`,
+      `Delete ${ref} "${message}"?\n\nIts changes are not applied. Undo (until you close the app) brings it back.`,
+    actions: "Stash actions",
+    deleteAll: (n: number) => `Delete all stashes (${n})`,
+    deleteAllHint: "Remove every stash without applying any (asks first)",
+    deleteAllNone: "There are no stashes",
+    deleteAllConfirm: (messages: string[]) =>
+      [
+        `Delete ${messages.length === 1 ? "this stash" : `all ${messages.length} stashes`}?`,
+        "",
+        ...messages.slice(0, 10),
+        ...(messages.length > 10 ? [`… and ${messages.length - 10} more`] : []),
+        "",
+        "Their changes are not applied. Undo (until you close the app) brings them back; after that they are lost.",
+      ].join("\n"),
   },
 
   newBranch: {

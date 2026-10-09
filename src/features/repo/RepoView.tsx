@@ -268,6 +268,10 @@ export default function RepoView({
               onFastForward={fastForwardTo}
               onMerge={mergeInto}
               onStashApplied={reload}
+              onAllStashesDropped={(ids) => {
+                if (selectedCommit && ids.includes(selectedCommit.id)) closeCommit();
+                reload();
+              }}
               onStashDropped={(id) => {
                 if (selectedCommit?.id === id) closeCommit();
                 reload();
