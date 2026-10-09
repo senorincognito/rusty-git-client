@@ -37,6 +37,7 @@ pub fn run() {
             sidebar::branches::count_unmerged_commits,
             sidebar::branches::create_branch,
             sidebar::branches::delete_local_branch,
+            sidebar::branches::delete_synced_branches,
             sidebar::branches::get_local_branches,
             sidebar::branches::rename_local_branch,
             changes::get_head_commit,

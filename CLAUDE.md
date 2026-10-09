@@ -111,6 +111,7 @@ app rename so users keep their data. Don't change it casually.
   helper, SSH agent, config apply; `GIT_TERMINAL_PROMPT=0`, no console window on Windows).
 - **Async UI requests** must ignore out-of-order responses: use `useLatestRequest`
   (`const isCurrent = start(); ...; if (isCurrent()) set(...)`).
+- **Delete synced branches** (Local branches "⋯" menu, `delete_synced_branches`): "synced" = has an upstream and the local tip equals the upstream tip (`ahead == 0 && behind == 0` in `BranchInfo`, so relative to the last fetch), never the checked-out branch. The UI lists them in the confirmation; the backend re-checks each name before deleting and silently skips any that no longer qualify. One undo step (`Kind::Keep`).
 - **Sidebar section headlines** can carry a "⋯" menu (`Section`'s `action` prop): Local branches (*New branch…*, which shows
   the same `NewBranchForm` the toolbar's Branch button uses, inline) and Remotes. Keep branch creation in that one form.
 - **Sidebar layout**: `.sidebar` does not scroll itself; each open `Section` is a shrinkable flex item (min height 96px) whose

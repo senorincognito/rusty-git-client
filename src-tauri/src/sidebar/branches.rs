@@ -250,6 +250,27 @@ fn delete_branch_checked(repo: &Repository, name: &str) -> Result<(), String> {
     branch.delete().map_err(err)
 }
 
+/// Deletes the given local branches that are fully synced with their upstream: they have one, and both point at the
+/// same commit, so everything on them is also on the remote branch. The checked-out branch, branches that are ahead,
+/// behind or without an upstream, and names that no longer exist are skipped. Returns the names that were deleted.
+fn delete_synced(repo: &Repository, names: &[String]) -> Result<Vec<String>, String> {
+    let mut deleted = Vec::new();
+    for name in names {
+        let Ok(mut branch) = repo.find_branch(name, BranchType::Local) else { continue };
+        if branch.is_head() {
+            continue;
+        }
+        let tip = branch.get().target();
+        let upstream_tip = branch.upstream().ok().and_then(|u| u.get().target());
+        if tip.is_none() || tip != upstream_tip {
+            continue;
+        }
+        branch.delete().map_err(err)?;
+        deleted.push(name.clone());
+    }
+    Ok(deleted)
+}
+
 /// Number of commits that deleting `name` would leave unreachable (0 when fully merged).
 #[tauri::command]
 pub async fn count_unmerged_commits(path: String, name: String) -> Result<usize, String> {
@@ -268,6 +289,22 @@ pub async fn delete_local_branch(path: String, name: String) -> Result<(), Strin
         })
         .await
         .map_err(|e| e.to_string())?
+    })
+    .await
+}
+
+/// Deletes the listed branches that are still fully synced with their upstream (see [`delete_synced`]).
+#[tauri::command]
+pub async fn delete_synced_branches(path: String, names: Vec<String>) -> Result<Vec<String>, String> {
+    let label = if names.len() == 1 {
+        format!("Delete branch {}", names[0])
+    } else {
+        format!("Delete {} synced branches", names.len())
+    };
+    crate::undo::recorded(&path.clone(), label, crate::undo::Kind::Keep, || async move {
+        tauri::async_runtime::spawn_blocking(move || delete_synced(&Repository::discover(&path).map_err(err)?, &names))
+            .await
+            .map_err(|e| e.to_string())?
     })
     .await
 }
@@ -498,6 +535,47 @@ mod tests {
         repo.reference("refs/remotes/origin/main", c, true, "test").unwrap();
         assert!(checkout_remote(&repo, "origin", "main").unwrap_err().contains("does not track"));
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn deletes_only_branches_that_match_their_upstream() {
+        let dir = std::env::temp_dir().join(format!("gc-synced-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let repo = Repository::init(&dir).unwrap();
+        let sig = Signature::now("t", "t@example.com").unwrap();
+        let tree = repo.find_tree(repo.treebuilder(None).unwrap().write().unwrap()).unwrap();
+        let a = repo.commit(Some("refs/heads/main"), &sig, &sig, "a", &tree, &[]).unwrap();
+        repo.set_head("refs/heads/main").unwrap();
+        let a_commit = repo.find_commit(a).unwrap();
+        let b = repo.commit(None, &sig, &sig, "b", &tree, &[&a_commit]).unwrap();
+        let b_commit = repo.find_commit(b).unwrap();
+        repo.remote("origin", "https://example.invalid/r.git").unwrap();
+
+        // Each branch gets a remote-tracking ref and an upstream; the commits decide whether it is synced.
+        let setups: [(&str, git2::Oid, git2::Oid); 4] = [
+            ("synced", a, a), // same commit
+            ("ahead", b, a),  // local has a commit the remote lacks
+            ("behind", a, b), // the remote has a commit the local lacks
+            ("head-synced", a, a),
+        ];
+        for (name, local, remote) in setups {
+            repo.reference(&format!("refs/remotes/origin/{name}"), remote, true, "t").unwrap();
+            let mut branch = repo.branch(name, &repo.find_commit(local).unwrap(), false).unwrap();
+            branch.set_upstream(Some(&format!("origin/{name}"))).unwrap();
+        }
+        repo.branch("local-only", &b_commit, false).unwrap(); // no upstream
+        repo.set_head("refs/heads/head-synced").unwrap();
+
+        let all: Vec<String> =
+            ["synced", "ahead", "behind", "head-synced", "local-only", "missing"].map(String::from).to_vec();
+        let deleted = delete_synced(&repo, &all).unwrap();
+        assert_eq!(deleted, ["synced"]);
+        let left: Vec<_> = local_branches(&repo).unwrap().into_iter().map(|b| b.name).collect();
+        assert_eq!(left, ["ahead", "behind", "head-synced", "local-only", "main"]);
+
+        // Only the listed names are considered.
+        assert!(delete_synced(&repo, &[]).unwrap().is_empty());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

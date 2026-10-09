@@ -226,7 +226,9 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   checkout: refused if uncommitted changes would be overwritten).
 - **Branch** button: create a branch from the current commit and check it out; the name is
   validated and uncommitted changes carry over.
-  The **⋯** button in the Local branches headline has *New branch…*, which opens the same name form inline.
+  The **⋯** button in the Local branches headline has *New branch…*, which opens the same name form inline, and *Delete synced branches (n)*: it deletes
+  every local branch that has an upstream and points at exactly the same commit as it (as of the last fetch), so nothing is lost: the commits stay on the remote. The
+  checked-out branch is never deleted, and branches that are ahead, behind or have no upstream are kept. A confirmation lists the branches first, and **Undo** brings them back.
 - **Resizable sections**: drag the bottom edge of a left-panel section (Local branches, Remotes) to set its height, and the bar
   between the Unstaged and Staged lists in the right panel to share their heights. Arrow up/down on a focused bar nudge it (Shift =
   bigger steps), double-click resets. The sizes are remembered. A section can never be dragged so far that another one loses its headline.

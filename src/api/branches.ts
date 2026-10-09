@@ -32,3 +32,10 @@ export const deleteLocalBranch = (path: string, name: string) =>
 /** Renames a local branch that is not checked out. */
 export const renameLocalBranch = (path: string, name: string, newName: string) =>
   invoke<void>("rename_local_branch", { path, name, newName });
+
+/**
+ * Deletes those of the given local branches that are still fully synced with their upstream (same commit); the
+ * checked-out branch and anything ahead, behind or without an upstream is skipped. Resolves to the deleted names.
+ */
+export const deleteSyncedBranches = (path: string, names: string[]) =>
+  invoke<string[]>("delete_synced_branches", { path, names });

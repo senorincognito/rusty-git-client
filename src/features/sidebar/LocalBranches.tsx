@@ -3,6 +3,7 @@ import {
   checkoutLocalBranch,
   countUnmergedCommits,
   deleteLocalBranch,
+  deleteSyncedBranches,
   renameLocalBranch,
   getLocalBranches,
   type BranchInfo,
@@ -87,6 +88,27 @@ export default function LocalBranches({
       onChanged();
     } catch (e) {
       setError(String(e)); // the editor stays open so the name can be corrected
+    }
+  };
+
+  // Branches that point at the same commit as their upstream (as last fetched), except the checked-out one.
+  const synced = (branches ?? []).filter((b) => !b.isHead && b.upstream !== null && b.ahead === 0 && b.behind === 0);
+
+  const deleteSynced = async () => {
+    const names = synced.map((b) => b.name);
+    try {
+      const ok = await confirmDialog(
+        t.localBranches.deleteSyncedConfirm(names),
+        t.localBranches.deleteSyncedTitle,
+        true,
+        t.common.delete,
+      );
+      if (!ok) return;
+      await deleteSyncedBranches(path, names);
+      setError(null);
+      onChanged();
+    } catch (e) {
+      setError(String(e));
     }
   };
 
@@ -178,6 +200,14 @@ export default function LocalBranches({
                 setError(null);
                 setCreating(true);
               },
+            },
+            {
+              label: t.localBranches.deleteSynced(synced.length),
+              danger: true,
+              separatorBefore: true,
+              disabled: synced.length === 0,
+              title: synced.length === 0 ? t.localBranches.deleteSyncedNone : t.localBranches.deleteSyncedHint,
+              onClick: deleteSynced,
             },
           ]}
         />
