@@ -90,6 +90,9 @@ pub fn run() {
             terminal::term_write,
             terminal::term_resize,
             terminal::term_stop,
+            repo::folders::get_repo_folder,
+            repo::folders::scan_repo_folder,
+            repo::folders::set_repo_folder,
             repo::watch::watch_repo,
             repo::watch::unwatch_repo,
         ])

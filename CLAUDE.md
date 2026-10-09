@@ -45,6 +45,7 @@ the module path to be visible from the crate root.
 | Folder / file | Frontend feature | Commands / role |
 | --- | --- | --- |
 | `repo/mod.rs` | `features/welcome`, `features/repo` | `open_repo`, recent repos (JSON in the app data dir) |
+| `repo/folders.rs` | `features/welcome` | `get_repo_folder` / `set_repo_folder` (remembered start-screen folder), `scan_repo_folder`: repositories ≤ 3 levels down (max 500; hidden folders and `node_modules` skipped; symlinks not followed; a repository is listed, never searched) |
 | `repo/watch.rs` | `features/repo` | the `.git` watcher (`watch_repo`, `unwatch_repo`) |
 | `graph/mod.rs` | `features/graph` | `get_graph`: revwalk over all refs, lane layout computed in Rust, `on_head` flag per row |
 | `graph/fast_forward.rs` | graph + branch context menus | `fast_forward_cmd`: move the checked-out branch forward to a commit id or full ref name |
@@ -96,7 +97,7 @@ styles/                    global SCSS: tokens, mixins, base, buttons, switch, f
 
 ### Persisted state
 
-`recent_repos.json` in the app data dir; `localStorage` keys `sidebarWidth`, `changesWidth`,
+`recent_repos.json` and `repo_folder.json` (the start screen's folder of repositories, a JSON string) in the app data dir; `localStorage` keys `sidebarWidth`, `changesWidth`,
 `autoFetch.enabled` (default true), `autoFetch.seconds` (default 180), `diff.fullFile` (default true), `sectionHeight.<local|remotes|stashes>` (px), `changesSplit` (fraction).
 All of it is keyed by the bundle identifier `com.gitclient.app`, which is **deliberately unchanged** by the
 app rename so users keep their data. Don't change it casually.
@@ -156,6 +157,7 @@ app rename so users keep their data. Don't change it casually.
 
 ## Product decisions already made (keep consistent)
 
+- **Start screen** (`features/welcome/Welcome`): two panels (CSS grid; stacked under 800px): Recent on the left; on the right the repositories found in one remembered folder (`repo_folder.json`), filtered with `matchesFilter` from the sidebar, opened with the same `openRepo` (so they also become recent). One folder only; several are a possible extension. Not live: a rescan (↻) or reopening the screen refreshes it. Cards show the branch and last-commit age but no change status (opening each repository to count changes would be slow for hundreds).
 - **Pull** fast-forwards only (`--ff-only`). If the branches diverged, a dialog lists both sides and offers
   **Merge (default, preselected)**, Rebase, Cancel. The Pull button's arrow/right-click menu has
   "Pull (merge)" and "Pull (rebase)" to skip the dialog. All run with `--autostash`. On **conflicts the

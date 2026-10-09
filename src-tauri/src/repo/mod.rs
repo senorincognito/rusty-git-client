@@ -1,3 +1,4 @@
+pub mod folders;
 pub mod watch;
 
 use std::fs;
@@ -9,7 +10,7 @@ use tauri::{AppHandle, Manager};
 
 const MAX_RECENT: usize = 20;
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct RepoInfo {
     pub path: String,

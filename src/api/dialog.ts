@@ -2,8 +2,8 @@ import { ask, message, open } from "@tauri-apps/plugin-dialog";
 import { t } from "@/i18n";
 
 /** Shows the native folder picker; resolves to null if cancelled. */
-export async function pickFolder(): Promise<string | null> {
-  const selected = await open({ directory: true, multiple: false, title: t.welcome.pickerTitle });
+export async function pickFolder(title = t.welcome.pickerTitle): Promise<string | null> {
+  const selected = await open({ directory: true, multiple: false, title });
   return typeof selected === "string" ? selected : null;
 }
 

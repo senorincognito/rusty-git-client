@@ -1,12 +1,17 @@
 @use "@/styles/core" as *;
 
+// Two panels side by side: recent repositories on the left, the folder's repositories on the right. Below 800px
+// wide they stack.
 .welcome {
-  max-width: 640px;
-  margin: 0 auto;
-  padding: 48px 24px;
+  height: 100vh; // like the repository screen (.shell)
+  display: flex;
+  flex-direction: column;
+  padding: 32px 40px;
+  box-sizing: border-box;
+  overflow: hidden;
 
   h2 {
-    margin-top: 32px;
+    margin: 0;
     font-size: 12px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -14,7 +19,51 @@
   }
 }
 
-.recents {
+.welcome-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 24px;
+
+  h1 {
+    margin: 0;
+  }
+}
+
+.welcome-error {
+  flex: none;
+  margin: 0 0 16px;
+}
+
+.welcome-panels {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
+  gap: 24px;
+
+  @media (max-width: 800px) {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow-y: auto;
+  }
+}
+
+.welcome-panel {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: $panel;
+  border: 1px solid $border;
+  border-radius: $radius;
+  overflow-y: auto;
+}
+
+.recents,
+.folder-repos {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -27,7 +76,8 @@
   }
 }
 
-.recent {
+.recent,
+.repo-card {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -35,7 +85,7 @@
   align-items: flex-start;
   gap: 2px;
   padding: 10px 12px;
-  background: $panel;
+  background: $bg;
   border: 1px solid $border;
   border-radius: $radius;
   text-align: left;
@@ -47,11 +97,100 @@
   .name {
     font-weight: 600;
   }
+}
 
-  .path {
-    max-width: 100%;
+.recent .path {
+  max-width: 100%;
+  @include truncate;
+  color: $muted;
+  font-size: 12px;
+}
+
+.folder-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.folder-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.folder-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+
+  p {
+    margin: 0;
+    max-width: 52ch;
+  }
+}
+
+.folder-path {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0;
+  font: 12px $font-mono;
+  color: $muted;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+
+  .folder-count {
+    margin-left: auto;
+    flex: none;
+    font-family: inherit;
+  }
+}
+
+.folder-filter {
+  @include text-field;
+}
+
+// A found repository: name, the folders in between, the branch, and when it was last committed to.
+.repo-card {
+  .rc-top {
+    width: 100%;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .name {
+    flex: none;
+  }
+
+  .rc-parent {
+    min-width: 0;
     @include truncate;
-    color: $muted;
     font-size: 12px;
+    color: $muted;
+  }
+
+  .rc-branch {
+    flex: none;
+    margin-left: auto;
+    padding: 0 8px;
+    border-radius: $radius-pill;
+    background: #2f3a4a;
+    color: #9cc4ff;
+    font-size: 11px;
+    font-weight: 600;
+
+    &.detached {
+      background: #4a4030;
+      color: #e0c27a;
+    }
+  }
+
+  .rc-when {
+    font-size: 12px;
+    color: $muted;
   }
 }
