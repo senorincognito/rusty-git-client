@@ -245,6 +245,9 @@ app rename so users keep their data. Don't change it casually.
   Removing a remote (`remote_delete`) drops its remote-tracking refs and the upstream of branches that tracked it, never
   touches the server, and confirms first. Names are checked with `Remote::is_valid_name`. The fetch-failure ⚠ shows on every
   remote because the fetch covers all of them.
+- **Checkout from the graph** (`Graph`: `checkoutTargets`, `checkoutItems`, `doubleClickTarget`; `RepoView.checkoutRef`): a row whose `refs` include a `branch` or `remote` label that is not `isHead` (so never the checked-out branch
+  or a detached HEAD) gets *Check out <name>* first in its menu (a submenu if several) and a double-click does it (local branch preferred, else the single remote one). Local = `checkout_local_branch`;
+  remote = `checkout_remote_branch` with the label split at its first `/` (remote names with a slash would fail with "not found"). Stashes and the WIP row offer nothing.
 - **Remote branch checkout** (`checkout_remote_branch`, double-click or first item of its menu): creates local `<name>` at the remote tip with
   upstream `<remote>/<name>` and checks it out safely (the new branch is removed again if the checkout fails); an existing local
   branch is reused only if it already tracks that remote branch, otherwise it errors rather than taking it over.

@@ -3,6 +3,8 @@ import { listen } from "@tauri-apps/api/event";
 import type { ChangeKind } from "@/api/changes";
 import type { CommitFile, HistoryEntry } from "@/api/commit";
 import { confirmDialog, showError, showInfo } from "@/api/dialog";
+import { checkoutLocalBranch, checkoutRemoteBranch } from "@/api/branches";
+import type { RefLabel } from "@/api/graph";
 import { applyStash, dropStash, popStash } from "@/api/stash";
 import { dropLatestCommit, fastForward, getDropInfo, getResetInfo, mergeBranch, resetToCommit, type ResetMode } from "@/api/history";
 import { openRepo, type RepoInfo } from "@/api/repo";
@@ -117,6 +119,23 @@ export default function RepoView({
       reload();
     } catch (e) {
       await showError(String(e), t.repo.fastForwardTitle);
+    }
+  };
+
+  // Right-click > Check out (or double-click) on a commit that is the tip of a branch. A remote branch ("origin/x") becomes
+  // a local branch that tracks it, like checking it out from the sidebar.
+  const checkoutRef = async (ref: RefLabel) => {
+    try {
+      if (ref.kind === "remote") {
+        const slash = ref.name.indexOf("/");
+        await checkoutRemoteBranch(path, ref.name.slice(0, slash), ref.name.slice(slash + 1));
+      } else {
+        await checkoutLocalBranch(path, ref.name);
+      }
+      setOpenWorkingFile(null); // the files may have changed under an open working-tree diff
+      reload();
+    } catch (e) {
+      await showError(String(e), t.repo.checkoutTitle);
     }
   };
 
@@ -277,6 +296,7 @@ export default function RepoView({
                   onResetCommit={resetCommit}
                   onFastForward={(c) => fastForwardTo(c.id)}
                   onStashAction={stashAction}
+                  onCheckout={checkoutRef}
                   hasChanges={changeCount > 0}
                 />
               </div>

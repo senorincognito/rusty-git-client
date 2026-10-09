@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { useArrowKeys } from "@/hooks/useArrowKeys";
-import { getGraph, type Edge, type Graph as GraphData, type GraphRow } from "@/api/graph";
+import { getGraph, type Edge, type Graph as GraphData, type GraphRow, type RefLabel } from "@/api/graph";
 import type { ResetMode } from "@/api/history";
-import ContextMenu from "@/components/ContextMenu";
+import ContextMenu, { type MenuItem } from "@/components/ContextMenu";
 import { t } from "@/i18n";
 import "./Graph.scss";
 
@@ -54,6 +54,16 @@ function RowGraph({ row, width }: { row: GraphRow; width: number }) {
   );
 }
 
+/** The branches whose tip is this commit and that can be switched to: every local or remote branch except the checked-out one. */
+const checkoutTargets = (row: GraphRow): RefLabel[] =>
+  row.isStash || row.isWip ? [] : row.refs.filter((r) => (r.kind === "branch" || r.kind === "remote") && !r.isHead);
+
+/** Double-click: a local branch if there is one, else the only remote branch; with several remotes the menu decides. */
+const doubleClickTarget = (row: GraphRow): RefLabel | undefined => {
+  const targets = checkoutTargets(row);
+  return targets.find((r) => r.kind === "branch") ?? (targets.length === 1 ? targets[0] : undefined);
+};
+
 const dateFmt = new Intl.DateTimeFormat(undefined, {
   year: "numeric",
   month: "short",
@@ -75,6 +85,7 @@ export default function Graph({
   onResetCommit,
   onFastForward,
   onStashAction,
+  onCheckout,
   hasChanges,
 }: {
   path: string;
@@ -96,6 +107,8 @@ export default function Graph({
   onFastForward: (commit: { id: string; shortId: string }) => void;
   /** Right-click on a stash: apply, pop or delete it. */
   onStashAction: (action: "apply" | "pop" | "drop", stash: { id: string; label: string; message: string }) => void;
+  /** Check out the branch whose tip this is (a local branch, or a remote one that becomes a local branch). */
+  onCheckout: (ref: RefLabel) => void;
   /** There are uncommitted changes, so a stash can't be applied cleanly. */
   hasChanges: boolean;
 }) {
@@ -205,6 +218,22 @@ export default function Graph({
           ? t.graph.rebaseNothingAfter
           : undefined;
 
+  // "Check out" for the branches whose tip is the clicked commit: one item, or a group when there are several.
+  const checkoutItems = (row: GraphRow): MenuItem[] => {
+    const targets = checkoutTargets(row);
+    if (targets.length === 0) return [];
+    if (targets.length === 1) {
+      const [only] = targets;
+      return [{ label: t.graph.checkout(only.name), title: t.graph.checkoutHint(only.name), onClick: () => onCheckout(only) }];
+    }
+    return [
+      {
+        label: t.graph.checkoutGroup,
+        children: targets.map((r) => ({ label: r.name, title: t.graph.checkoutHint(r.name), onClick: () => onCheckout(r) })),
+      },
+    ];
+  };
+
   const laneWidth = Math.min(Math.max(graph?.maxLanes ?? 1, 1), 24) * LANE_W + 4;
 
   if (error) return <p className="error pad">{error}</p>;
@@ -224,6 +253,10 @@ export default function Graph({
             }
             style={{ top: (first + i) * ROW_H, height: ROW_H }}
             onClick={() => (row.isWip ? onSelectWip() : onSelectCommit({ id: row.id, shortId: row.shortId }))}
+            onDoubleClick={() => {
+              const target = doubleClickTarget(row);
+              if (target) onCheckout(target);
+            }}
             onContextMenu={(e) => {
               e.preventDefault();
               if (row.isWip) return; // nothing to do with the uncommitted changes here
@@ -286,8 +319,10 @@ export default function Graph({
           y={menu.y}
           onClose={closeMenu}
           items={[
+            ...checkoutItems(menu.row),
             {
               label: t.graph.rename,
+              separatorBefore: checkoutTargets(menu.row).length > 0,
               disabled: !menu.row.onHead,
               title: menu.row.onHead
                 ? undefined

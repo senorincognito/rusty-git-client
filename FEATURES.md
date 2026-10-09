@@ -100,6 +100,11 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   It works with uncommitted changes in the working directory; the stash's changes are lost.
 
 ## Commit graph context menu
+- A commit that is the tip of a branch, local or remote, has **Check out `<branch>`** at the top of its right-click menu (a **Check out** group listing the
+  branches when several end at the same commit). **Double-clicking** the commit does the same: it switches to the local branch, or, when only remote branches
+  end there, to the remote branch (a local branch that tracks it is created, like checking it out from the sidebar). With several remote branches and no local one,
+  double-click does nothing and the menu lets you choose. The checked-out branch is not offered. A checkout never overwrites uncommitted changes; if they are in the way
+  you get an error and nothing changes. **Undo** switches back.
 - Right-click a commit: **Rename commit** opens an editor in the right panel with the full
   message and **Update** / **Cancel** buttons (Esc cancels, Ctrl+Enter updates). Only
   commits on the current branch can be renamed.

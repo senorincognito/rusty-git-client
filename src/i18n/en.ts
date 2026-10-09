@@ -377,6 +377,9 @@ export const en = {
 
   graph: {
     noCommits: "No commits yet.",
+    checkout: (name: string) => `Check out ${name}`,
+    checkoutGroup: "Check out",
+    checkoutHint: (name: string) => `Switch to ${name}. A remote branch becomes a local branch that tracks it. Double-click the commit to do the same.`,
     rename: "Rename commit",
     renameStash: "A stash can't be renamed",
     renameNotOnBranch: "Only commits on the current branch can be renamed",
@@ -414,6 +417,7 @@ export const en = {
     terminal: ">_ Terminal",
     terminalHint: "Toggle terminal (Ctrl+`)",
     dropTitle: "Drop commit",
+    checkoutTitle: "Check out",
     stashTitle: "Stash",
     fastForwardTitle: "Fast-forward",
     mergeTitle: "Merge",
