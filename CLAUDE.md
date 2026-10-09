@@ -245,6 +245,9 @@ app rename so users keep their data. Don't change it casually.
   Removing a remote (`remote_delete`) drops its remote-tracking refs and the upstream of branches that tracked it, never
   touches the server, and confirms first. Names are checked with `Remote::is_valid_name`. The fetch-failure ⚠ shows on every
   remote because the fetch covers all of them.
+- **Graph highlighting** (`Graph.tsx` `isCurrent`, `Graph.scss`): the row of the commit HEAD points at (a ref label with `isHead`, also a detached HEAD) gets `.current` (accent bar via inset
+  box-shadow, faint tint placed *before* hover/selected so they win, bold subject) and a ring around its node; rows with `!onHead` (not reachable from HEAD, not WIP/stash) get `.off` (text at 60% opacity). The accent colour is
+  hard-coded as `rgba(63, 167, 160, …)` for the tints because the SCSS token is a CSS variable.
 - **Checkout from the graph** (`Graph`: `checkoutTargets`, `checkoutItems`, `doubleClickTarget`; `RepoView.checkoutRef`): a row whose `refs` include a `branch` or `remote` label that is not `isHead` (so never the checked-out branch
   or a detached HEAD) gets *Check out <name>* first in its menu (a submenu if several) and a double-click does it (local branch preferred, else the single remote one). Local = `checkout_local_branch`;
   remote = `checkout_remote_branch` with the label split at its first `/` (remote names with a slash would fail with "not found"). Stashes and the WIP row offer nothing.

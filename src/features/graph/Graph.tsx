@@ -32,6 +32,9 @@ function curve(x1: number, y1: number, x2: number, y2: number) {
   return `M${x1} ${y1}C${x1} ${mid} ${x2} ${mid} ${x2} ${y2}`;
 }
 
+/** The commit HEAD points at (the tip of the checked-out branch, or the detached HEAD). */
+const isCurrent = (row: GraphRow) => !row.isWip && !row.isStash && row.refs.some((r) => r.isHead);
+
 function RowGraph({ row, width }: { row: GraphRow; width: number }) {
   const mid = ROW_H / 2;
   const cx = x(row.col);
@@ -43,6 +46,7 @@ function RowGraph({ row, width }: { row: GraphRow; width: number }) {
       {row.through.map((e, i) => line(e, curve(x(e.col), 0, x(e.col), ROW_H), `t${i}`))}
       {row.top.map((e, i) => line(e, curve(x(e.col), 0, cx, mid), `u${i}`))}
       {row.bottom.map((e, i) => line(e, curve(cx, mid, x(e.col), ROW_H), `b${i}`))}
+      {isCurrent(row) && <circle cx={cx} cy={mid} r={NODE_R + 4} fill="none" stroke="var(--accent)" strokeWidth={2} />}
       {row.isWip ? (
         <circle cx={cx} cy={mid} r={NODE_R} fill="var(--bg)" stroke={color(row.color)} strokeWidth={2} strokeDasharray="2 2" />
       ) : row.isStash ? (
@@ -249,7 +253,10 @@ export default function Graph({
               "row" +
               (row.isWip ? " wip" : "") +
               ((row.isWip ? selectedId === null : row.id === selectedId) ? " selected" : "") +
-              (row.id === menu?.row.id ? " ctx" : "")
+              (row.id === menu?.row.id ? " ctx" : "") +
+              (isCurrent(row) ? " current" : "") +
+              // Commits that are not part of the checked-out branch's history fade back, so its history stands out.
+              (!row.onHead && !row.isWip && !row.isStash ? " off" : "")
             }
             style={{ top: (first + i) * ROW_H, height: ROW_H }}
             onClick={() => (row.isWip ? onSelectWip() : onSelectCommit({ id: row.id, shortId: row.shortId }))}

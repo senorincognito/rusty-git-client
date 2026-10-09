@@ -18,6 +18,17 @@
   white-space: nowrap;
   cursor: default;
 
+  // The commit HEAD points at: an accent bar on the left, a faint tint (hover and selected still win, being later)
+  // and a bold subject. The lane node gets a ring in Graph.tsx.
+  &.current {
+    background: rgba(63, 167, 160, 0.08);
+    box-shadow: inset 3px 0 0 $accent;
+
+    .summary {
+      font-weight: 600;
+    }
+  }
+
   &:hover {
     background: $hover-tint;
   }
@@ -29,6 +40,16 @@
 
   &.ctx {
     background: $press-tint;
+  }
+
+  // Not reachable from the checked-out branch: other branches' commits fade back.
+  &.off {
+    .summary,
+    .author,
+    .date,
+    .sha {
+      opacity: 0.6;
+    }
   }
 
   // The pseudo commit for uncommitted changes.
@@ -77,9 +98,11 @@
     color: #e0c27a;
   }
 
+  // The checked-out branch: filled, with a soft halo so it stands out among the other chips.
   &.head {
     background: $accent;
     color: $on-accent;
+    box-shadow: 0 0 0 2px rgba(63, 167, 160, 0.35);
   }
 
   &.stash {

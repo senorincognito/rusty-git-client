@@ -17,6 +17,9 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   lines per row.
 - Ref chips on each commit (current branch highlighted; branches, remotes and tags
   styled separately).
+- The commit you are on (HEAD) stands out: a ring around its node, an accent bar and a faint tint on its row, and a bold message. The chip of the checked-out
+  branch is filled with a halo. Commits that are not part of the checked-out branch's history (other branches' own commits) are shown faded, so the
+  current branch's history is easy to follow.
 - Columns for message, author, date and short hash.
 - Virtualised rendering, with history loaded in pages of 1000 as you scroll.
 - While there are uncommitted changes, a dashed "N file changes in working directory" row sits on top
