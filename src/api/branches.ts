@@ -39,3 +39,25 @@ export const renameLocalBranch = (path: string, name: string, newName: string) =
  */
 export const deleteSyncedBranches = (path: string, names: string[]) =>
   invoke<string[]>("delete_synced_branches", { path, names });
+
+/** A branch found by "Clean up merged": local when `remote` is null. */
+export interface MergedBranch {
+  remote: string | null;
+  name: string;
+}
+
+export interface MergedBranches {
+  /** The main branches they were merged into ("main", "origin/main"); empty when the repository has none. */
+  bases: string[];
+  branches: MergedBranch[];
+}
+
+/** The local branches (or, with `remote`, the remote branches) whose work is already contained in main. */
+export const getMergedBranches = (path: string, remote: boolean) =>
+  invoke<MergedBranches>("get_merged_branches", { path, remote });
+/** Deletes those of the named local branches that are still merged. Resolves to the deleted names. */
+export const deleteMergedLocal = (path: string, names: string[]) =>
+  invoke<string[]>("delete_merged_local", { path, names });
+/** Deletes those of the listed branches that are still merged from their remote servers (not undoable). */
+export const deleteMergedRemote = (path: string, items: MergedBranch[]) =>
+  invoke<MergedBranch[]>("delete_merged_remote", { path, items });

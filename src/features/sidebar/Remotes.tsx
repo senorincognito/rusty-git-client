@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { checkoutRemoteBranch } from "@/api/branches";
-import { confirmDialog } from "@/api/dialog";
+import { checkoutRemoteBranch, deleteMergedRemote, getMergedBranches } from "@/api/branches";
+import { confirmDialog, showInfo } from "@/api/dialog";
 import {
   countUnmergedRemoteCommits,
   deleteRemote,
@@ -158,6 +158,36 @@ export default function Remotes({
     }
   };
 
+  // "Clean up merged": remote branches already merged into their remote's main branch are deleted on the server.
+  const cleanUpMerged = async () => {
+    if (busy !== null) return;
+    try {
+      const found = await getMergedBranches(path, true);
+      if (found.branches.length === 0) {
+        await showInfo(t.remotes.cleanUpMergedNone(found.bases), t.remotes.cleanUpMergedTitle);
+        return;
+      }
+      const labels = found.branches.map((b) => `${b.remote}/${b.name}`);
+      const ok = await confirmDialog(
+        t.remotes.cleanUpMergedConfirm(labels, found.bases),
+        t.remotes.cleanUpMergedTitle,
+        true,
+        t.common.delete,
+      );
+      if (!ok) return;
+      setError(null);
+      setBusy(t.remotes.cleanUpMergedBusy(found.branches.length));
+      try {
+        await deleteMergedRemote(path, found.branches);
+      } finally {
+        setBusy(null);
+        onChanged();
+      }
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
   const checkOut = async (remote: string, branch: string) => {
     if (busy !== null) return;
     setBusy(t.remotes.checkingOut(`${remote}/${branch}`));
@@ -310,6 +340,14 @@ export default function Remotes({
                   },
                 ]
               : []),
+            {
+              label: t.remotes.cleanUpMerged,
+              danger: true,
+              separatorBefore: true,
+              disabled: busy !== null || remotes.length === 0,
+              title: t.remotes.cleanUpMergedHint,
+              onClick: cleanUpMerged,
+            },
           ]}
         />
       )}

@@ -234,6 +234,14 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   The **⋯** button in the Local branches headline has *New branch…*, which opens the same name form inline, and *Delete synced branches (n)*: it deletes
   every local branch that has an upstream and points at exactly the same commit as it (as of the last fetch), so nothing is lost: the commits stay on the remote. The
   checked-out branch is never deleted, and branches that are ahead, behind or have no upstream are kept. A confirmation lists the branches first, and **Undo** brings them back.
+- **Clean up merged…** (same menu, and in the **⋯** menu of the Remotes headline): deletes the branches whose work is already in the main branch.
+  - *Main* is `main`, else `master` (and, for the remotes, the remote's own `main`/`master`, found through `<remote>/HEAD`). A branch is merged when its tip is
+    an ancestor of main's tip, so nothing on it is lost. The checked-out branch, `main`, `master`, `develop`, `dev` and `trunk`, and branches that still sit exactly on
+    main's tip (they may be new, with no work yet) are never listed.
+  - **Local:** local branches merged into the local main or into any remote's main. A confirmation lists them; one **Undo** brings them all back.
+  - **Remote:** each remote branch merged into *its own* remote's main, except the upstream of the checked-out branch. They are deleted **on the server** with
+    `git push --delete` (your credentials apply), after a confirmation that says so. This can't be undone from the app. Fetch first so the lists are current.
+- Hovering a branch in the branch lists shows a pointer cursor.
 - **Resizable sections**: drag the bottom edge of a left-panel section (Local branches, Remotes) to set its height, and the bar
   between the Unstaged and Staged lists in the right panel to share their heights. Arrow up/down on a focused bar nudge it (Shift =
   bigger steps), double-click resets. The sizes are remembered. A section can never be dragged so far that another one loses its headline.

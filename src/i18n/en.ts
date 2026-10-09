@@ -147,6 +147,23 @@ export const en = {
     folderCount: (n: number) => plural(n, "branch", "branches"),
     current: (name: string) => `${name} (current)`,
     checkoutHint: (name: string) => `Double-click to check out ${name}`,
+    cleanUpMerged: "Clean up merged…",
+    cleanUpMergedHint: "Delete every local branch whose work is already in main (asks first)",
+    cleanUpMergedTitle: "Clean up merged branches",
+    cleanUpMergedNone: (bases: string[]) =>
+      bases.length === 0
+        ? "There is no main or master branch to compare with."
+        : `No local branch is merged into ${bases.join(" or ")} (the checked-out branch, main, develop and branches that still sit exactly on main are never listed).`,
+    cleanUpMergedConfirm: (names: string[], bases: string[]) =>
+      [
+        `Delete ${names.length === 1 ? "this branch" : `these ${names.length} branches`}?`,
+        "",
+        ...names.slice(0, 15),
+        ...(names.length > 15 ? [`… and ${names.length - 15} more`] : []),
+        "",
+        `Everything on ${names.length === 1 ? "it is" : "them is"} already in ${bases.join(" / ")}, so no commit is lost.`,
+        "Undo brings them back.",
+      ].join("\n"),
     deleteSynced: (n: number) => `Delete synced branches (${n})`,
     deleteSyncedHint: "Delete every local branch that points at the same commit as its remote branch (asks first)",
     deleteSyncedNone: "No local branch is fully synced with its remote branch (the checked-out branch is never deleted)",
@@ -204,6 +221,23 @@ export const en = {
         ...(trackingBranches > 0
           ? ["", `${plural(trackingBranches, "local branch", "local branches")} track${trackingBranches === 1 ? "s" : ""} it and will no longer have an upstream.`]
           : []),
+      ].join("\n"),
+    cleanUpMerged: "Clean up merged…",
+    cleanUpMergedHint: "Delete every remote branch that is already merged into the remote's main branch, on the server (asks first)",
+    cleanUpMergedTitle: "Clean up merged remote branches",
+    cleanUpMergedBusy: (n: number) => `Deleting ${n === 1 ? "1 remote branch" : `${n} remote branches`}…`,
+    cleanUpMergedNone: (bases: string[]) =>
+      bases.length === 0
+        ? "No remote has a main or master branch (fetch first?) to compare with."
+        : `No remote branch is merged into ${bases.join(" or ")} (main, develop, branches that still sit exactly on main, and the upstream of the checked-out branch are never listed).`,
+    cleanUpMergedConfirm: (items: string[], bases: string[]) =>
+      [
+        `Delete ${items.length === 1 ? "this branch" : `these ${items.length} branches`} from the server?`,
+        "",
+        ...items.slice(0, 15),
+        ...(items.length > 15 ? [`… and ${items.length - 15} more`] : []),
+        "",
+        `Everything on ${items.length === 1 ? "it is" : "them is"} already in ${bases.join(" / ")}, so no commit is lost. But this removes the branches on the remote for everybody, and Undo can't bring them back.`,
       ].join("\n"),
     checkout: "Check out",
     merge: (full: string) => `Merge ${full} into the current branch`,

@@ -56,6 +56,7 @@
     align-items: center;
     gap: 6px;
     padding: 4px 12px 4px 28px;
+    cursor: pointer;
     user-select: none; // double-click switches branches; don't select the text
 
     &:hover {

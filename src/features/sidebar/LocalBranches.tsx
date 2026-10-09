@@ -3,12 +3,14 @@ import {
   checkoutLocalBranch,
   countUnmergedCommits,
   deleteLocalBranch,
+  deleteMergedLocal,
   deleteSyncedBranches,
+  getMergedBranches,
   renameLocalBranch,
   getLocalBranches,
   type BranchInfo,
 } from "@/api/branches";
-import { confirmDialog } from "@/api/dialog";
+import { confirmDialog, showInfo } from "@/api/dialog";
 import ContextMenu from "@/components/ContextMenu";
 import Section from "@/components/Section";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
@@ -112,6 +114,30 @@ export default function LocalBranches({
     }
   };
 
+  // "Clean up merged": the branches whose work is already in main.
+  const cleanUpMerged = async () => {
+    try {
+      const found = await getMergedBranches(path, false);
+      const names = found.branches.map((b) => b.name);
+      if (names.length === 0) {
+        await showInfo(t.localBranches.cleanUpMergedNone(found.bases), t.localBranches.cleanUpMergedTitle);
+        return;
+      }
+      const ok = await confirmDialog(
+        t.localBranches.cleanUpMergedConfirm(names, found.bases),
+        t.localBranches.cleanUpMergedTitle,
+        true,
+        t.common.delete,
+      );
+      if (!ok) return;
+      await deleteMergedLocal(path, names);
+      setError(null);
+      onChanged();
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
   const deleteBranch = async (b: BranchInfo) => {
     try {
       const unmerged = await countUnmergedCommits(path, b.name);
@@ -202,9 +228,15 @@ export default function LocalBranches({
               },
             },
             {
-              label: t.localBranches.deleteSynced(synced.length),
+              label: t.localBranches.cleanUpMerged,
               danger: true,
               separatorBefore: true,
+              title: t.localBranches.cleanUpMergedHint,
+              onClick: cleanUpMerged,
+            },
+            {
+              label: t.localBranches.deleteSynced(synced.length),
+              danger: true,
               disabled: synced.length === 0,
               title: synced.length === 0 ? t.localBranches.deleteSyncedNone : t.localBranches.deleteSyncedHint,
               onClick: deleteSynced,
