@@ -19,6 +19,8 @@
 
 .PARAMETER Open
     Open the output folder in Explorer when the build is done.
+.PARAMETER Run
+    Start the app when the build is done.
 
 .EXAMPLE
     scripts\build-release.cmd
@@ -29,7 +31,8 @@ param(
     [ValidateSet('all', 'nsis', 'msi', 'none')]
     [string]$Bundles = 'all',
     [switch]$SkipInstall,
-    [switch]$Open
+    [switch]$Open,
+    [switch]$Run
 )
 
 $ErrorActionPreference = 'Stop'
@@ -98,4 +101,10 @@ Write-Host 'The installers are unsigned, so Windows SmartScreen shows an "unknow
 if ($Open) {
     $folder = if ($Bundles -eq 'none') { $release } else { Join-Path $release 'bundle' }
     Start-Process explorer.exe $folder
+}
+
+if ($Run) {
+    $app = Join-Path $release 'rusty-git-client.exe'
+    Write-Step "Starting $app"
+    Start-Process -FilePath $app
 }

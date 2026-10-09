@@ -15,6 +15,7 @@ duplicating them, and move finished items off "Not implemented yet".
 ```sh
 npm install
 npm run tauri dev                                    # run the app (hot reload; a Rust change restarts it)
+npm run build:run                                    # release build without installers, then start it (--skip-build: just start)
 npm run lint                                         # ESLint (src/ only)
 npx tsc --noEmit                                     # typecheck the frontend
 npx vite build                                       # bundle (also proves the "@/" alias resolves)
@@ -452,6 +453,7 @@ Release), and a Windows code-signing certificate to avoid the SmartScreen "unkno
   from GitHub. All of `target/` and `dist/` is git-ignored. Run it with `export PATH="$PATH:$HOME/.cargo/bin"`
   in the Bash tool; a cold build prints one line per crate, so redirect output to a log in the scratchpad and
   run it in the background.
+- **Build and run**: `npm run build:run` (`scripts/run-release.mjs`, plain Node so it behaves the same everywhere) runs `npm run tauri build -- --no-bundle` and starts `src-tauri/target/release/rusty-git-client[.exe]` detached (`--skip-build` only starts it). The build scripts have the same as a flag: `-Run` (ps1/cmd) and `--run` (sh). Only `--help`, the syntax of the scripts and the build step (which is the normal `tauri build`) were checked; the launch itself was not run from here, since it opens a window.
 - Gotchas from writing the scripts: the `.cmd` pauses at the end only when started with no arguments (the
   double-click case); set `NOPAUSE=1` when another program runs it. In the `.sh`, `set -e` + `pipefail`
   turns a failing `find` on a missing folder (`bundle/macos` on Windows) into a silent script failure: guard

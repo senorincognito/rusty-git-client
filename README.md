@@ -33,6 +33,15 @@ npm run tauri dev
 changes reload instantly; a change to the Rust code restarts the app. The first start compiles every Rust
 dependency and takes a few minutes.
 
+To try the optimised release build instead of the debug one, build it and start it in one go (no installers, so it is quicker than a full build):
+
+```sh
+npm run build:run                  # build, then start it
+npm run build:run -- --skip-build  # start the release build that is already there
+```
+
+It works the same on Windows and macOS, and the app is started detached, so the command returns once it is running.
+
 Don't use `npm run dev` for this: it only starts the Vite web server on port 1420 and opens no window, and the
 page can't work in a browser because it talks to the Rust backend.
 
@@ -72,6 +81,7 @@ are. The first build takes a few minutes, later ones about a minute and a half. 
 | `-Bundles none` / `--no-bundle` | Only the standalone app, no installers (fastest) |
 | `-SkipInstall` / `--skip-install` | Don't run `npm ci` when `node_modules` is missing |
 | `-Open` / `--open` | Open the output folder when done |
+| `-Run` / `--run` | Start the app when the build is done |
 
 Results are in `src-tauri/target/release/`: `rusty-git-client.exe` (runs standalone), `bundle/nsis/*-setup.exe` (setup
 installer) and `bundle/msi/*.msi`. On macOS they are an `.app` and a `.dmg` under `bundle/`.

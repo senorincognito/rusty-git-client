@@ -3,11 +3,12 @@
 #   Windows (Git Bash): exe + NSIS setup + MSI     macOS: .app + .dmg     Linux: deb / rpm / AppImage
 # Windows users can use scripts/build-release.cmd instead. macOS builds must be made on a Mac.
 #
-# Usage: scripts/build-release.sh [--bundles <list>] [--no-bundle] [--skip-install] [--open]
+# Usage: scripts/build-release.sh [--bundles <list>] [--no-bundle] [--skip-install] [--open] [--run]
 #   --bundles <list>  only these bundle types, e.g. "nsis", "msi", "dmg" (default: all of this OS)
 #   --no-bundle       only the standalone binary, no installers (fastest)
 #   --skip-install    don't run "npm ci" when node_modules is missing
 #   --open            open the output folder when done
+#   --run             start the app when the build is done
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -16,13 +17,15 @@ bundles=""
 no_bundle=0
 skip_install=0
 open_folder=0
+run_app=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --bundles)      bundles="${2:?--bundles needs a value}"; shift 2 ;;
     --no-bundle)    no_bundle=1; shift ;;
     --skip-install) skip_install=1; shift ;;
     --open)         open_folder=1; shift ;;
-    -h|--help)      sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --run)          run_app=1; shift ;;
+    -h|--help)      sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)              echo "Unknown option: $1 (try --help)" >&2; exit 2 ;;
   esac
 done
@@ -83,4 +86,10 @@ if [ "$open_folder" -eq 1 ]; then
     MINGW*|MSYS*|CYGWIN*) explorer.exe "$(cygpath -w "$target")" || true ;;
     *) xdg-open "$target" ;;
   esac
+fi
+
+if [ "$run_app" -eq 1 ]; then
+  app="$release/rusty-git-client"; [ -f "$app.exe" ] && app="$app.exe"
+  step "Starting $app"
+  ( "$app" >/dev/null 2>&1 & )
 fi
