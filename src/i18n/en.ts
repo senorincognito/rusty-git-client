@@ -450,12 +450,14 @@ export const en = {
     stageLine: "Stage line",
     stageLineHint: "Put only this line into the staging area; the rest of the hunk stays unstaged",
     discardLine: "Discard line",
-    discardLineSoon: "Discarding a single line is not available yet",
+    discardLineHint: "Throw away only this line: an added line is removed from the file, a removed line comes back",
+    discardLineConfirm: (kind: "add" | "del", text: string, path: string) =>
+      `${kind === "add" ? "Remove this added line from" : "Put this removed line back into"} ${path}?\n\n${text.length > 120 ? `${text.slice(0, 120)}…` : text.trim() === "" ? "(an empty line)" : text}\n\nUndo (until you close the app) brings it back.`,
     stageHunkHint: "Put this hunk into the staging area",
     discardHunk: "Discard hunk",
     discardHunkHint: "Remove this hunk from the file (cannot be undone)",
     discardHunkConfirm: (adds: number, dels: number, path: string) =>
-      `Discard this hunk (+${adds} -${dels}) from ${path}?\n\nThe lines are removed from the file and can't be recovered.`,
+      `Discard this hunk (+${adds} -${dels}) from ${path}?\n\nThe lines are removed from the file. Undo (until you close the app) brings them back.`,
     discardOk: "Discard",
   },
 

@@ -76,14 +76,15 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   and keeps its scroll position.
 - Every run of changed lines is a **hunk** with its own heading ("Hunk 2 of 5 · +3 -1"), in all diff views. On
   the *unstaged* diff of a tracked file each heading has **Stage hunk** (puts just that hunk into the staging
-  area) and **Discard hunk** (removes it from the file after a confirmation; cannot be undone); on the
+  area) and **Discard hunk** (removes it from the file after a confirmation; **Undo** brings it back); on the
   *staged* diff each heading has **Unstage hunk** (takes just that hunk back out of the staging area, the
   file on disk is untouched; a newly added file is removed from the index, a staged deletion comes back). Line endings,
   including CRLF files and a missing final newline, are preserved, and a hunk whose file changed since the diff
   was shown is refused instead of applied to the wrong lines. New (untracked) files and binary files have no
   hunk buttons: stage the whole file from the list.
 - **Right-click an added or removed line** in the *unstaged* diff of a tracked file for **Stage line** (puts just that one line into the staging area; the rest of its
-  hunk stays unstaged, and **Undo** takes it back) and **Discard line** (not available yet: it is listed but greyed out). Context lines, the staged diff and new files have no line menu.
+  hunk stays unstaged, and **Undo** takes it back) and **Discard line** (throws away just that line after a confirmation: an added line is removed from the file, a
+  removed line is put back where it was, with the file's own line ending; **Undo** brings it back). Context lines, the staged diff and new files have no line menu.
 - While you have uncommitted changes, a notice at the top of the panel says how many files
   changed in the working directory, with a **View changes** button that closes the commit view
   and returns to the staging panel (your draft commit message is kept). The × does the same.
@@ -327,7 +328,7 @@ Esc leaves text fields and the terminal alone, so it never interferes with typin
 
 - Tags in the sidebar
 - Merge and rebase as standalone actions, revert commit
-- Discarding and unstaging a single line (staging one is built)
+- Unstaging a single line (staging and discarding one are built)
 - A conflict-resolution UI (a pull that conflicts is cancelled and the repository left untouched)
 - Syntax highlighting and intra-line diff highlighting, side-by-side diff
 - Multiple remotes work, but only the target remote is used to publish new branches

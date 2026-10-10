@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { confirmDialog } from "@/api/dialog";
 import {
   discardHunk,
+  discardLine,
   getFileDiff,
   getWorkingDiff,
   stageHunk,
@@ -68,7 +69,7 @@ export default function FileDiff({
   const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
   // Right-click on a changed line: the line's hunk and its position among the hunk's changed lines.
-  const [lineMenu, setLineMenu] = useState<{ x: number; y: number; row: number; block: number; offset: number } | null>(null);
+  const [lineMenu, setLineMenu] = useState<{ x: number; y: number; row: number; line: DiffLine; block: number; offset: number } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewH, setViewH] = useState(600);
@@ -227,6 +228,17 @@ export default function FileDiff({
     if (diff) act(() => stageHunk(path, file.path, block, diff.blocks[block]));
   };
 
+  const discardOneLine = async (line: DiffLine, block: number, offset: number) => {
+    if (!diff || (line.kind !== "add" && line.kind !== "del")) return;
+    const ok = await confirmDialog(
+      t.diff.discardLineConfirm(line.kind, line.text, file.path),
+      t.diff.discardLine,
+      true,
+      t.diff.discardOk,
+    );
+    if (ok) act(() => discardLine(path, file.path, block, diff.blocks[block], offset));
+  };
+
   const stageOneLine = (block: number, offset: number) => {
     if (diff) act(() => stageLine(path, file.path, block, diff.blocks[block], offset));
   };
@@ -372,7 +384,7 @@ export default function FileDiff({
                     // Only the unstaged changes of a tracked file can be staged line by line.
                     if (!canStage || l.block === null || (l.kind !== "add" && l.kind !== "del")) return;
                     e.preventDefault();
-                    setLineMenu({ x: e.clientX, y: e.clientY, row: first + i, block: l.block, offset: offsetInHunk(row.idx, l.block) });
+                    setLineMenu({ x: e.clientX, y: e.clientY, row: first + i, line: l, block: l.block, offset: offsetInHunk(row.idx, l.block) });
                   }}
                 >
                   {l.kind === "hunk" ? (
@@ -403,8 +415,14 @@ export default function FileDiff({
               title: t.diff.stageLineHint,
               onClick: () => stageOneLine(lineMenu.block, lineMenu.offset),
             },
-            // Not built yet; listed so the two line actions sit together once it is.
-            { label: t.diff.discardLine, danger: true, disabled: true, title: t.diff.discardLineSoon },
+            {
+              label: t.diff.discardLine,
+              danger: true,
+              disabled: acting,
+              separatorBefore: true,
+              title: t.diff.discardLineHint,
+              onClick: () => discardOneLine(lineMenu.line, lineMenu.block, lineMenu.offset),
+            },
           ]}
         />
       )}

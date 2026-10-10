@@ -57,6 +57,7 @@ pub fn run() {
             history::drop::get_drop_info,
             history::rename::get_rename_info,
             changes::hunks::discard_hunk_cmd,
+            changes::hunks::discard_line_cmd,
             changes::hunks::stage_hunk_cmd,
             changes::hunks::stage_line_cmd,
             changes::hunks::unstage_hunk_cmd,

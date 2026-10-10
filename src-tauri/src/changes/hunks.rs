@@ -64,22 +64,23 @@ pub(crate) fn stage_line(repo: &Repository, path: &str, block: usize, id: &str, 
     stage_selected(repo, path, block, id, Some(line))
 }
 
+/// The index in `diff.lines` of the `n`-th added or removed line of hunk `block` (None for the whole hunk); a hunk
+/// that has no such line means the diff is out of date.
+fn selected_line(diff: &FileDiff, block: usize, only: Option<usize>) -> Result<Option<usize>, String> {
+    let Some(n) = only else { return Ok(None) };
+    diff.lines
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| l.block == Some(block) && matches!(l.kind, "add" | "del"))
+        .nth(n)
+        .map(|(i, _)| Some(i))
+        .ok_or_else(|| STALE.to_string())
+}
+
 /// Stages the whole hunk (`only` None) or just one of its changed lines.
 fn stage_selected(repo: &Repository, path: &str, block: usize, id: &str, only: Option<usize>) -> Result<(), String> {
     let (diff, raw) = locate(repo, path, false, block, id)?;
-    // The diff line to stage when it is a single line (the `n`-th changed line of the hunk).
-    let target = match only {
-        None => None,
-        Some(n) => Some(
-            diff.lines
-                .iter()
-                .enumerate()
-                .filter(|(_, l)| l.block == Some(block) && matches!(l.kind, "add" | "del"))
-                .nth(n)
-                .map(|(i, _)| i)
-                .ok_or(STALE)?,
-        ),
-    };
+    let target = selected_line(&diff, block, only)?;
     let rel = Path::new(path);
     let mut index = repo.index().map_err(err)?;
     let existing = index.get_path(rel, 0).ok_or(STALE)?;
@@ -205,13 +206,25 @@ fn with_eol(line: &[u8], crlf: bool) -> Vec<u8> {
 }
 
 /// Throws away hunk `block` of the file's unstaged changes: the file on disk gets the index version
-/// of those lines back, the other changes stay. Cannot be undone.
+/// of those lines back, the other changes stay. Undo (the journal) can bring it back.
 pub(crate) fn discard_hunk(repo: &Repository, path: &str, block: usize, id: &str) -> Result<(), String> {
+    discard_selected(repo, path, block, id, None)
+}
+
+/// Throws away a single changed line: the `line`-th added or removed line of hunk `block` (counted like for
+/// [`stage_line`]). An added line is taken out of the file, a removed one is put back where it was.
+pub(crate) fn discard_line(repo: &Repository, path: &str, block: usize, id: &str, line: usize) -> Result<(), String> {
+    discard_selected(repo, path, block, id, Some(line))
+}
+
+/// Discards the whole hunk (`only` None) or just one of its changed lines.
+fn discard_selected(repo: &Repository, path: &str, block: usize, id: &str, only: Option<usize>) -> Result<(), String> {
     let (diff, raw) = locate(repo, path, false, block, id)?;
+    let target = selected_line(&diff, block, only)?;
     let rel = Path::new(path);
     let full = workdir(repo)?.join(rel);
 
-    if !full.exists() {
+    if !full.exists() && only.is_none() {
         // Deleted on disk: discarding the deletion brings the file back from the index.
         let mut index = repo.index().map_err(err)?;
         let mut checkout = CheckoutBuilder::new();
@@ -219,7 +232,8 @@ pub(crate) fn discard_hunk(repo: &Repository, path: &str, block: usize, id: &str
         return repo.checkout_index(Some(&mut index), Some(&mut checkout)).map_err(err);
     }
 
-    let bytes = std::fs::read(&full).map_err(|e| e.to_string())?;
+    // A deleted file has no lines on disk; restoring one of its lines creates the file with just that line.
+    let bytes = if full.exists() { std::fs::read(&full).map_err(|e| e.to_string())? } else { Vec::new() };
     let lines = split_lines(&bytes);
     let in_file = diff.lines.iter().filter(|l| l.kind == "ctx" || l.kind == "add").count();
     if lines.len() != in_file {
@@ -229,8 +243,8 @@ pub(crate) fn discard_hunk(repo: &Repository, path: &str, block: usize, id: &str
 
     let mut out: Vec<u8> = Vec::new();
     let mut at = 0; // position in the file on disk
-    for (line, old) in diff.lines.iter().zip(&raw) {
-        let mine = line.block == Some(block);
+    for (i, (line, old)) in diff.lines.iter().zip(&raw).enumerate() {
+        let mine = line.block == Some(block) && target.is_none_or(|t| t == i);
         match line.kind {
             "ctx" => {
                 out.extend_from_slice(lines[at]);
@@ -295,7 +309,23 @@ pub async fn unstage_hunk_cmd(path: String, file: String, block: usize, block_id
     .await
 }
 
-/// Discards one hunk of a file's unstaged changes (not undoable).
+/// Discards a single changed line of a file's unstaged changes (see [`discard_line`]).
+#[tauri::command]
+pub async fn discard_line_cmd(
+    path: String,
+    file: String,
+    block: usize,
+    block_id: String,
+    line: usize,
+) -> Result<(), String> {
+    let label = format!("Discard a line of {}", crate::undo::describe_paths(std::slice::from_ref(&file)));
+    crate::undo::recorded(&path.clone(), label, crate::undo::Kind::Full, || {
+        blocking(path, move |r| discard_line(r, &file, block, &block_id, line))
+    })
+    .await
+}
+
+/// Discards one hunk of a file's unstaged changes (undoable through the journal).
 #[tauri::command]
 pub async fn discard_hunk_cmd(path: String, file: String, block: usize, block_id: String) -> Result<(), String> {
     let label = format!("Discard a hunk of {}", crate::undo::describe_paths(std::slice::from_ref(&file)));
@@ -642,6 +672,60 @@ mod tests {
         assert_eq!(d.blocks.len(), 2);
         stage_line(&repo, "a.txt", 1, &d.blocks[1], 0).unwrap();
         assert_eq!(index_text(&repo, "a.txt"), "one\r\ntwo\r\nthree\r\nfour\r\n");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn discards_single_lines_of_a_hunk() {
+        let (dir, repo) = setup("discard-line");
+        fs::write(dir.join("a.txt"), "a\nb\nc\nd\ne\n").unwrap();
+        commit_paths(&repo, &["a.txt"], "base");
+        fs::write(dir.join("a.txt"), "a\nB\nC\nd\ne\n").unwrap();
+        let on_disk = || fs::read_to_string(dir.join("a.txt")).unwrap();
+        let d = unstaged(&repo, "a.txt");
+        // Hunk 0 is -b -c +B +C. Discarding the added B takes it out of the file.
+        discard_line(&repo, "a.txt", 0, &d.blocks[0], 2).unwrap();
+        assert_eq!(on_disk(), "a\nC\nd\ne\n");
+        // The index is never touched.
+        assert_eq!(index_text(&repo, "a.txt"), "a\nb\nc\nd\ne\n");
+
+        // The old fingerprint is stale now.
+        assert!(discard_line(&repo, "a.txt", 0, &d.blocks[0], 0).unwrap_err().contains("changed since"));
+
+        // Discarding the removed b puts it back in its place.
+        let d = unstaged(&repo, "a.txt");
+        discard_line(&repo, "a.txt", 0, &d.blocks[0], 0).unwrap();
+        assert_eq!(on_disk(), "a\nb\nC\nd\ne\n");
+
+        // An offset past the hunk is refused; the rest is discarded line by line until nothing differs.
+        let d = unstaged(&repo, "a.txt");
+        assert!(discard_line(&repo, "a.txt", 0, &d.blocks[0], 7).unwrap_err().contains("changed since"));
+        loop {
+            let d = unstaged(&repo, "a.txt");
+            if d.blocks.is_empty() {
+                break;
+            }
+            discard_line(&repo, "a.txt", 0, &d.blocks[0], 0).unwrap();
+        }
+        assert_eq!(on_disk(), "a\nb\nc\nd\ne\n");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_discarded_line_gets_the_files_line_ending_back() {
+        let (dir, repo) = setup("discard-line-crlf");
+        fs::write(dir.join("a.txt"), "one\ntwo\nthree\n").unwrap();
+        commit_paths(&repo, &["a.txt"], "base");
+        // The file on disk uses CRLF; "two" is removed there.
+        fs::write(dir.join("a.txt"), "one\r\nthree\r\nfour\r\n").unwrap();
+        let d = unstaged(&repo, "a.txt");
+        // Every line differs in its ending, so the removed "two" is not the first changed line of its hunk.
+        let at = d.lines.iter().position(|l| l.kind == "del" && l.text == "two").unwrap();
+        let block = d.lines[at].block.unwrap();
+        let offset = d.lines[..at].iter().filter(|l| l.block == Some(block) && matches!(l.kind, "add" | "del")).count();
+        discard_line(&repo, "a.txt", block, &d.blocks[block], offset).unwrap();
+        let text = fs::read_to_string(dir.join("a.txt")).unwrap();
+        assert!(text.contains("two\r\n"), "{text:?}");
         let _ = fs::remove_dir_all(&dir);
     }
 }

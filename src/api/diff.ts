@@ -47,7 +47,7 @@ export const getWorkingDiff = (path: string, file: string, staged: boolean, full
 export const stageHunk = (path: string, file: string, block: number, blockId: string) =>
   invoke<void>("stage_hunk_cmd", { path, file, block, blockId });
 
-/** Throws away one hunk of a file's unstaged changes. Cannot be undone. */
+/** Throws away one hunk of a file's unstaged changes (Undo can bring it back). */
 export const discardHunk = (path: string, file: string, block: number, blockId: string) =>
   invoke<void>("discard_hunk_cmd", { path, file, block, blockId });
 
@@ -61,3 +61,7 @@ export const unstageHunk = (path: string, file: string, block: number, blockId: 
  */
 export const stageLine = (path: string, file: string, block: number, blockId: string, line: number) =>
   invoke<void>("stage_line_cmd", { path, file, block, blockId, line });
+
+/** Throws away a single changed line of a file's unstaged changes (same addressing as `stageLine`). */
+export const discardLine = (path: string, file: string, block: number, blockId: string, line: number) =>
+  invoke<void>("discard_line_cmd", { path, file, block, blockId, line });
