@@ -55,13 +55,20 @@ export const discardHunk = (path: string, file: string, block: number, blockId: 
 export const unstageHunk = (path: string, file: string, block: number, blockId: string) =>
   invoke<void>("unstage_hunk_cmd", { path, file, block, blockId });
 
-/**
- * Puts a single changed line of a file's unstaged changes into the staging area: the `line`-th added or removed line
- * of hunk `block`, counted from 0 within the hunk. `blockId` is the hunk's fingerprint, as for a whole hunk.
- */
-export const stageLine = (path: string, file: string, block: number, blockId: string, line: number) =>
-  invoke<void>("stage_line_cmd", { path, file, block, blockId, line });
+/** One changed line: the `line`-th added or removed line of hunk `block` (from 0 within the hunk), with the hunk's fingerprint. */
+export interface LineRef {
+  block: number;
+  blockId: string;
+  line: number;
+}
 
-/** Throws away a single changed line of a file's unstaged changes (same addressing as `stageLine`). */
-export const discardLine = (path: string, file: string, block: number, blockId: string, line: number) =>
-  invoke<void>("discard_line_cmd", { path, file, block, blockId, line });
+/**
+ * Puts the given changed lines of a file's unstaged changes (one line, or a selection spanning hunks) into the staging
+ * area. The rest of their hunks stays unstaged; a file that changed since the diff was shown is refused.
+ */
+export const stageLines = (path: string, file: string, lines: LineRef[]) =>
+  invoke<void>("stage_lines_cmd", { path, file, lines });
+
+/** Throws away the given changed lines of a file's unstaged changes (same addressing as `stageLines`). */
+export const discardLines = (path: string, file: string, lines: LineRef[]) =>
+  invoke<void>("discard_lines_cmd", { path, file, lines });

@@ -6,10 +6,12 @@
 //! newline) survive. Every request carries the hunk's fingerprint, so a stale diff can never be
 //! applied to a different change.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use git2::build::CheckoutBuilder;
 use git2::{IndexEntry, IndexTime, Oid, Repository};
+use serde::Deserialize;
 
 use crate::commit::{working_diff_raw, FileDiff};
 
@@ -24,14 +26,13 @@ fn workdir(repo: &Repository) -> Result<PathBuf, String> {
 }
 
 /// The unstaged (or, with `staged`, the staged) diff of `path` with its exact line bytes, after
-/// checking that hunk `block` is still the one the caller saw (`id`) and that the file can be
-/// changed hunk by hunk.
-fn locate(
+/// checking that every hunk in `blocks` (hunk number and fingerprint) is still the one the caller saw and that the
+/// file can be changed hunk by hunk.
+fn locate_blocks(
     repo: &Repository,
     path: &str,
     staged: bool,
-    block: usize,
-    id: &str,
+    blocks: &[(usize, &str)],
 ) -> Result<(FileDiff, Vec<Vec<u8>>), String> {
     let (diff, raw) = working_diff_raw(repo, path, staged, true)?;
     if diff.binary {
@@ -40,7 +41,7 @@ fn locate(
     if diff.truncated {
         return Err("This diff is too large to change hunk by hunk".into());
     }
-    if diff.blocks.get(block).map(String::as_str) != Some(id) {
+    if blocks.iter().any(|(block, id)| diff.blocks.get(*block).map(String::as_str) != Some(*id)) {
         return Err(STALE.into());
     }
     // An untracked file has no index version to build from (a staged new file is fine to unstage).
@@ -52,35 +53,93 @@ fn locate(
     Ok((diff, raw))
 }
 
+fn locate(
+    repo: &Repository,
+    path: &str,
+    staged: bool,
+    block: usize,
+    id: &str,
+) -> Result<(FileDiff, Vec<Vec<u8>>), String> {
+    locate_blocks(repo, path, staged, &[(block, id)])
+}
+
+/// One changed line as the caller saw it: the `line`-th added or removed line of hunk `block` (counted from 0 within
+/// the hunk, the same in the full-file and the changes-only view), with the hunk's fingerprint.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct LineRef {
+    pub block: usize,
+    pub block_id: String,
+    pub line: usize,
+}
+
+/// What a stage or discard applies to.
+enum Pick {
+    /// Every changed line of this hunk.
+    Hunk(usize),
+    /// These `diff.lines` positions.
+    Lines(HashSet<usize>),
+}
+
+impl Pick {
+    fn has(&self, position: usize, line: &crate::commit::DiffLine) -> bool {
+        match self {
+            Pick::Hunk(block) => line.block == Some(*block),
+            Pick::Lines(set) => set.contains(&position),
+        }
+    }
+}
+
+/// Turns line references into positions in `diff.lines`; a reference to a line the hunk doesn't have means the diff is
+/// out of date.
+fn resolve_lines(diff: &FileDiff, lines: &[(usize, usize)]) -> Result<Pick, String> {
+    if lines.is_empty() {
+        return Err("No lines selected".into());
+    }
+    let mut chosen = HashSet::new();
+    for (block, n) in lines {
+        let position = diff
+            .lines
+            .iter()
+            .enumerate()
+            .filter(|(_, l)| l.block == Some(*block) && matches!(l.kind, "add" | "del"))
+            .nth(*n)
+            .map(|(i, _)| i)
+            .ok_or(STALE)?;
+        chosen.insert(position);
+    }
+    Ok(Pick::Lines(chosen))
+}
+
+/// The distinct hunks named by line references, as (number, fingerprint); one hunk with two fingerprints is stale.
+fn hunks_of(lines: &[LineRef]) -> Result<Vec<(usize, &str)>, String> {
+    let mut out: Vec<(usize, &str)> = Vec::new();
+    for l in lines {
+        match out.iter().find(|(b, _)| *b == l.block) {
+            Some((_, id)) if *id != l.block_id => return Err(STALE.into()),
+            Some(_) => {}
+            None => out.push((l.block, l.block_id.as_str())),
+        }
+    }
+    Ok(out)
+}
+
 /// Puts hunk `block` of the file's unstaged changes into the index (the staging area), leaving
 /// the file on disk and the other hunks untouched.
 pub(crate) fn stage_hunk(repo: &Repository, path: &str, block: usize, id: &str) -> Result<(), String> {
-    stage_selected(repo, path, block, id, None)
-}
-
-/// Puts a single changed line into the index: the `line`-th added or removed line of hunk `block` (counted from 0
-/// within the hunk, the same in the full-file and the changes-only view). The rest of the hunk stays unstaged.
-pub(crate) fn stage_line(repo: &Repository, path: &str, block: usize, id: &str, line: usize) -> Result<(), String> {
-    stage_selected(repo, path, block, id, Some(line))
-}
-
-/// The index in `diff.lines` of the `n`-th added or removed line of hunk `block` (None for the whole hunk); a hunk
-/// that has no such line means the diff is out of date.
-fn selected_line(diff: &FileDiff, block: usize, only: Option<usize>) -> Result<Option<usize>, String> {
-    let Some(n) = only else { return Ok(None) };
-    diff.lines
-        .iter()
-        .enumerate()
-        .filter(|(_, l)| l.block == Some(block) && matches!(l.kind, "add" | "del"))
-        .nth(n)
-        .map(|(i, _)| Some(i))
-        .ok_or_else(|| STALE.to_string())
-}
-
-/// Stages the whole hunk (`only` None) or just one of its changed lines.
-fn stage_selected(repo: &Repository, path: &str, block: usize, id: &str, only: Option<usize>) -> Result<(), String> {
     let (diff, raw) = locate(repo, path, false, block, id)?;
-    let target = selected_line(&diff, block, only)?;
+    stage_pick(repo, path, &diff, &raw, &Pick::Hunk(block))
+}
+
+/// Puts the given changed lines (possibly from several hunks) into the index; the rest of their hunks stays unstaged.
+pub(crate) fn stage_lines(repo: &Repository, path: &str, lines: &[LineRef]) -> Result<(), String> {
+    let (diff, raw) = locate_blocks(repo, path, false, &hunks_of(lines)?)?;
+    let pairs: Vec<(usize, usize)> = lines.iter().map(|l| (l.block, l.line)).collect();
+    stage_pick(repo, path, &diff, &raw, &resolve_lines(&diff, &pairs)?)
+}
+
+/// Stages what `pick` selects from the unstaged diff.
+fn stage_pick(repo: &Repository, path: &str, diff: &FileDiff, raw: &[Vec<u8>], pick: &Pick) -> Result<(), String> {
     let rel = Path::new(path);
     let mut index = repo.index().map_err(err)?;
     let existing = index.get_path(rel, 0).ok_or(STALE)?;
@@ -88,8 +147,8 @@ fn stage_selected(repo: &Repository, path: &str, block: usize, id: &str, only: O
     // The index version, plus only the selected changes: a removed line that is selected drops out, an added one
     // comes in; every other change stays as the index has it.
     let mut out: Vec<u8> = Vec::new();
-    for (i, (line, bytes)) in diff.lines.iter().zip(&raw).enumerate() {
-        let mine = line.block == Some(block) && target.is_none_or(|t| t == i);
+    for (i, (line, bytes)) in diff.lines.iter().zip(raw).enumerate() {
+        let mine = pick.has(i, line);
         match line.kind {
             "ctx" => out.extend_from_slice(bytes),
             "del" if !mine => out.extend_from_slice(bytes),
@@ -208,29 +267,29 @@ fn with_eol(line: &[u8], crlf: bool) -> Vec<u8> {
 /// Throws away hunk `block` of the file's unstaged changes: the file on disk gets the index version
 /// of those lines back, the other changes stay. Undo (the journal) can bring it back.
 pub(crate) fn discard_hunk(repo: &Repository, path: &str, block: usize, id: &str) -> Result<(), String> {
-    discard_selected(repo, path, block, id, None)
-}
-
-/// Throws away a single changed line: the `line`-th added or removed line of hunk `block` (counted like for
-/// [`stage_line`]). An added line is taken out of the file, a removed one is put back where it was.
-pub(crate) fn discard_line(repo: &Repository, path: &str, block: usize, id: &str, line: usize) -> Result<(), String> {
-    discard_selected(repo, path, block, id, Some(line))
-}
-
-/// Discards the whole hunk (`only` None) or just one of its changed lines.
-fn discard_selected(repo: &Repository, path: &str, block: usize, id: &str, only: Option<usize>) -> Result<(), String> {
     let (diff, raw) = locate(repo, path, false, block, id)?;
-    let target = selected_line(&diff, block, only)?;
-    let rel = Path::new(path);
-    let full = workdir(repo)?.join(rel);
-
-    if !full.exists() && only.is_none() {
+    let full = workdir(repo)?.join(path);
+    if !full.exists() {
         // Deleted on disk: discarding the deletion brings the file back from the index.
         let mut index = repo.index().map_err(err)?;
         let mut checkout = CheckoutBuilder::new();
         checkout.force().path(path);
         return repo.checkout_index(Some(&mut index), Some(&mut checkout)).map_err(err);
     }
+    discard_pick(repo, path, &diff, &raw, &Pick::Hunk(block))
+}
+
+/// Throws away the given changed lines (possibly from several hunks): an added line is taken out of the file, a
+/// removed one is put back where it was.
+pub(crate) fn discard_lines(repo: &Repository, path: &str, lines: &[LineRef]) -> Result<(), String> {
+    let (diff, raw) = locate_blocks(repo, path, false, &hunks_of(lines)?)?;
+    let pairs: Vec<(usize, usize)> = lines.iter().map(|l| (l.block, l.line)).collect();
+    discard_pick(repo, path, &diff, &raw, &resolve_lines(&diff, &pairs)?)
+}
+
+/// Rewrites the file on disk without what `pick` selects from the unstaged diff.
+fn discard_pick(repo: &Repository, path: &str, diff: &FileDiff, raw: &[Vec<u8>], pick: &Pick) -> Result<(), String> {
+    let full = workdir(repo)?.join(Path::new(path));
 
     // A deleted file has no lines on disk; restoring one of its lines creates the file with just that line.
     let bytes = if full.exists() { std::fs::read(&full).map_err(|e| e.to_string())? } else { Vec::new() };
@@ -243,8 +302,8 @@ fn discard_selected(repo: &Repository, path: &str, block: usize, id: &str, only:
 
     let mut out: Vec<u8> = Vec::new();
     let mut at = 0; // position in the file on disk
-    for (i, (line, old)) in diff.lines.iter().zip(&raw).enumerate() {
-        let mine = line.block == Some(block) && target.is_none_or(|t| t == i);
+    for (i, (line, old)) in diff.lines.iter().zip(raw).enumerate() {
+        let mine = pick.has(i, line);
         match line.kind {
             "ctx" => {
                 out.extend_from_slice(lines[at]);
@@ -282,19 +341,17 @@ pub async fn stage_hunk_cmd(path: String, file: String, block: usize, block_id: 
     .await
 }
 
-/// Stages a single changed line of a file's unstaged changes. `line` counts the added and removed lines of hunk `block`
-/// from 0. Same checks as for a whole hunk.
+/// Stages the given changed lines of a file's unstaged changes (a single line, or a selection spanning hunks).
 #[tauri::command]
-pub async fn stage_line_cmd(
-    path: String,
-    file: String,
-    block: usize,
-    block_id: String,
-    line: usize,
-) -> Result<(), String> {
-    let label = format!("Stage a line of {}", crate::undo::describe_paths(std::slice::from_ref(&file)));
+pub async fn stage_lines_cmd(path: String, file: String, lines: Vec<LineRef>) -> Result<(), String> {
+    let name = crate::undo::describe_paths(std::slice::from_ref(&file));
+    let label = if lines.len() == 1 {
+        format!("Stage a line of {name}")
+    } else {
+        format!("Stage {} lines of {name}", lines.len())
+    };
     crate::undo::recorded(&path.clone(), label, crate::undo::Kind::Index, || {
-        blocking(path, move |r| stage_line(r, &file, block, &block_id, line))
+        blocking(path, move |r| stage_lines(r, &file, &lines))
     })
     .await
 }
@@ -309,18 +366,17 @@ pub async fn unstage_hunk_cmd(path: String, file: String, block: usize, block_id
     .await
 }
 
-/// Discards a single changed line of a file's unstaged changes (see [`discard_line`]).
+/// Discards the given changed lines of a file's unstaged changes (see [`discard_lines`]).
 #[tauri::command]
-pub async fn discard_line_cmd(
-    path: String,
-    file: String,
-    block: usize,
-    block_id: String,
-    line: usize,
-) -> Result<(), String> {
-    let label = format!("Discard a line of {}", crate::undo::describe_paths(std::slice::from_ref(&file)));
+pub async fn discard_lines_cmd(path: String, file: String, lines: Vec<LineRef>) -> Result<(), String> {
+    let name = crate::undo::describe_paths(std::slice::from_ref(&file));
+    let label = if lines.len() == 1 {
+        format!("Discard a line of {name}")
+    } else {
+        format!("Discard {} lines of {name}", lines.len())
+    };
     crate::undo::recorded(&path.clone(), label, crate::undo::Kind::Full, || {
-        blocking(path, move |r| discard_line(r, &file, block, &block_id, line))
+        blocking(path, move |r| discard_lines(r, &file, &lines))
     })
     .await
 }
@@ -351,6 +407,16 @@ mod tests {
         cfg.set_str("user.email", "t@example.com").unwrap();
         cfg.set_str("core.autocrlf", "false").unwrap(); // the result must not depend on the machine's git config
         (dir, repo)
+    }
+
+    fn line(block: usize, id: &str, line: usize) -> LineRef {
+        LineRef { block, block_id: id.to_string(), line }
+    }
+    fn stage_line(repo: &Repository, p: &str, block: usize, id: &str, n: usize) -> Result<(), String> {
+        stage_lines(repo, p, &[line(block, id, n)])
+    }
+    fn discard_line(repo: &Repository, p: &str, block: usize, id: &str, n: usize) -> Result<(), String> {
+        discard_lines(repo, p, &[line(block, id, n)])
     }
 
     fn commit_paths(repo: &Repository, paths: &[&str], msg: &str) {
@@ -726,6 +792,48 @@ mod tests {
         discard_line(&repo, "a.txt", block, &d.blocks[block], offset).unwrap();
         let text = fs::read_to_string(dir.join("a.txt")).unwrap();
         assert!(text.contains("two\r\n"), "{text:?}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn several_lines_across_hunks_are_staged_and_discarded_together() {
+        let (dir, repo) = setup("multi");
+        fs::write(dir.join("a.txt"), text(&lines(20))).unwrap();
+        commit_paths(&repo, &["a.txt"], "base");
+        // Two separate hunks: line 3 -> THREE and line 15 -> FIFTEEN, plus a new last line.
+        let mut v = lines(20);
+        v[2] = "THREE".into();
+        v[14] = "FIFTEEN".into();
+        v.push("line 21".into());
+        fs::write(dir.join("a.txt"), text(&v)).unwrap();
+        let d = unstaged(&repo, "a.txt");
+        assert_eq!(d.blocks.len(), 3);
+        let id = |b: usize| d.blocks[b].clone();
+
+        // Stage the added THREE (hunk 0, second changed line) and the new last line (hunk 2) in one go.
+        stage_lines(&repo, "a.txt", &[line(0, &id(0), 1), line(2, &id(2), 0)]).unwrap();
+        let mut want = lines(20);
+        want.insert(3, "THREE".into()); // line 3 is still in the index, THREE is added after it
+        want.push("line 21".into());
+        assert_eq!(index_text(&repo, "a.txt"), text(&want));
+
+        // A selection naming one hunk with two different fingerprints is refused.
+        assert!(stage_lines(&repo, "a.txt", &[line(0, "x", 0)]).unwrap_err().contains("changed since"));
+        assert!(stage_lines(&repo, "a.txt", &[]).unwrap_err().contains("No lines"));
+
+        // Discard the added FIFTEEN and the removed "line 3" (hunk 0 offset 0) together.
+        let d = unstaged(&repo, "a.txt");
+        let find = |text: &str| {
+            let at = d.lines.iter().position(|l| l.text == text && matches!(l.kind, "add" | "del")).unwrap();
+            let block = d.lines[at].block.unwrap();
+            let n = d.lines[..at].iter().filter(|l| l.block == Some(block) && matches!(l.kind, "add" | "del")).count();
+            line(block, &d.blocks[block], n)
+        };
+        discard_lines(&repo, "a.txt", &[find("FIFTEEN"), find("line 3")]).unwrap();
+        let disk = fs::read_to_string(dir.join("a.txt")).unwrap();
+        // FIFTEEN is gone and "line 3" is back next to the staged THREE; the removed "line 15" was not selected.
+        assert!(!disk.contains("FIFTEEN") && disk.contains("line 3\n") && disk.contains("THREE\n"));
+        assert!(!disk.contains("line 15\n"));
         let _ = fs::remove_dir_all(&dir);
     }
 }

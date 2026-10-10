@@ -85,6 +85,10 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
 - **Right-click an added or removed line** in the *unstaged* diff of a tracked file for **Stage line** (puts just that one line into the staging area; the rest of its
   hunk stays unstaged, and **Undo** takes it back) and **Discard line** (throws away just that line after a confirmation: an added line is removed from the file, a
   removed line is put back where it was, with the file's own line ending; **Undo** brings it back). Context lines, the staged diff and new files have no line menu.
+  **Several lines at once:** select them with the mouse (drag over the code, as when copying text) and right-click inside the selection: the menu then says **Stage 4 lines** /
+  **Discard 4 lines** (the number of added and removed lines in the selection; context lines and hunk headings are not counted, and the selection may span several hunks). It is one
+  step to **Undo**, and discarding asks once for the whole selection. Right-click outside the selection to act on a single line. The selection works within the part of the
+  file that is currently drawn (the visible rows plus a margin): select in steps for a very long stretch.
 - While you have uncommitted changes, a notice at the top of the panel says how many files
   changed in the working directory, with a **View changes** button that closes the commit view
   and returns to the staging panel (your draft commit message is kept). The × does the same.

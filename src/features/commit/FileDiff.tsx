@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { confirmDialog } from "@/api/dialog";
 import {
   discardHunk,
-  discardLine,
+  discardLines,
   getFileDiff,
   getWorkingDiff,
   stageHunk,
-  stageLine,
+  stageLines,
+  type LineRef,
   unstageHunk,
   type DiffLine,
   type FileDiff as FileDiffData,
@@ -30,6 +31,13 @@ export interface DiffFile {
   path: string;
   oldPath?: string | null;
   status: FileStatus;
+}
+
+/** A changed line a context-menu action applies to: its row in the list, the line and how the backend addresses it. */
+interface LineTarget {
+  row: number;
+  line: DiffLine;
+  ref: LineRef;
 }
 
 /** What the virtual list draws: a diff line, or the heading above a hunk. */
@@ -69,7 +77,8 @@ export default function FileDiff({
   const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
   // Right-click on a changed line: the line's hunk and its position among the hunk's changed lines.
-  const [lineMenu, setLineMenu] = useState<{ x: number; y: number; row: number; line: DiffLine; block: number; offset: number } | null>(null);
+  // The changed lines a right-click acts on: the one under the pointer, or the text selection when the pointer is in it.
+  const [lineMenu, setLineMenu] = useState<{ x: number; y: number; targets: LineTarget[] } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewH, setViewH] = useState(600);
@@ -228,19 +237,54 @@ export default function FileDiff({
     if (diff) act(() => stageHunk(path, file.path, block, diff.blocks[block]));
   };
 
-  const discardOneLine = async (line: DiffLine, block: number, offset: number) => {
-    if (!diff || (line.kind !== "add" && line.kind !== "del")) return;
-    const ok = await confirmDialog(
-      t.diff.discardLineConfirm(line.kind, line.text, file.path),
-      t.diff.discardLine,
-      true,
-      t.diff.discardOk,
-    );
-    if (ok) act(() => discardLine(path, file.path, block, diff.blocks[block], offset));
+  const stageTargets = (targets: LineTarget[]) => {
+    if (!diff) return;
+    act(() => stageLines(path, file.path, targets.map((x) => x.ref)));
+    window.getSelection()?.removeAllRanges();
   };
 
-  const stageOneLine = (block: number, offset: number) => {
-    if (diff) act(() => stageLine(path, file.path, block, diff.blocks[block], offset));
+  const discardTargets = async (targets: LineTarget[]) => {
+    if (!diff) return;
+    const adds = targets.filter((x) => x.line.kind === "add").length;
+    const text =
+      targets.length === 1
+        ? t.diff.discardLineConfirm(targets[0].line.kind as "add" | "del", targets[0].line.text, file.path)
+        : t.diff.discardLinesConfirm(adds, targets.length - adds, file.path);
+    const title = targets.length === 1 ? t.diff.discardLine : t.diff.discardLines(targets.length);
+    if (!(await confirmDialog(text, title, true, t.diff.discardOk))) return;
+    act(() => discardLines(path, file.path, targets.map((x) => x.ref)));
+    window.getSelection()?.removeAllRanges();
+  };
+
+  // The rows of the list that the user's text selection (dragging over the code) touches, by row number.
+  const selectedRows = (): number[] => {
+    const selection = window.getSelection();
+    const body = scroller.current;
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed || !body) return [];
+    const range = selection.getRangeAt(0);
+    const found: number[] = [];
+    body.querySelectorAll<HTMLElement>(".dl[data-row]").forEach((el) => {
+      const code = el.querySelector(".tx");
+      if (!code || !range.intersectsNode(code)) return;
+      // Count a line only if some of its text is inside the selection (one that merely starts at the end of a line,
+      // or ends at the very start of the next, does not).
+      const text = document.createRange();
+      text.selectNodeContents(code);
+      const clip = range.cloneRange();
+      if (clip.compareBoundaryPoints(Range.START_TO_START, text) < 0) clip.setStart(text.startContainer, text.startOffset);
+      if (clip.compareBoundaryPoints(Range.END_TO_END, text) > 0) clip.setEnd(text.endContainer, text.endOffset);
+      if (!clip.collapsed) found.push(Number(el.dataset.row));
+    });
+    return found;
+  };
+
+  // A row as an action target; None for anything that is not an added or removed line of a hunk.
+  const targetOf = (rowNo: number): LineTarget | null => {
+    const row = rows[rowNo];
+    if (!diff || !row || row.type !== "line") return null;
+    const line = row.line;
+    if (line.block === null || (line.kind !== "add" && line.kind !== "del")) return null;
+    return { row: rowNo, line, ref: { block: line.block, blockId: diff.blocks[line.block], line: offsetInHunk(row.idx, line.block) } };
   };
 
   // A changed line's place within its hunk (0 = the hunk's first added or removed line).
@@ -378,13 +422,21 @@ export default function FileDiff({
               return (
                 <div
                   key={`line-${first + i}`}
-                  className={`dl ${l.kind}` + (lineMenu?.row === first + i ? " ctx" : "")}
+                  data-row={first + i}
+                  className={`dl ${l.kind}` + (lineMenu?.targets.some((target) => target.row === first + i) ? " ctx" : "")}
                   style={{ top }}
                   onContextMenu={(e) => {
                     // Only the unstaged changes of a tracked file can be staged line by line.
-                    if (!canStage || l.block === null || (l.kind !== "add" && l.kind !== "del")) return;
+                    const own = canStage ? targetOf(first + i) : null;
+                    if (!own) return;
                     e.preventDefault();
-                    setLineMenu({ x: e.clientX, y: e.clientY, row: first + i, line: l, block: l.block, offset: offsetInHunk(row.idx, l.block) });
+                    // Right-clicking inside a text selection of several changed lines acts on all of them.
+                    const selected = selectedRows();
+                    const targets =
+                      selected.includes(first + i) && selected.length > 1
+                        ? selected.map(targetOf).filter((x): x is LineTarget => x !== null)
+                        : [own];
+                    setLineMenu({ x: e.clientX, y: e.clientY, targets: targets.length > 1 ? targets : [own] });
                   }}
                 >
                   {l.kind === "hunk" ? (
@@ -408,22 +460,26 @@ export default function FileDiff({
           x={lineMenu.x}
           y={lineMenu.y}
           onClose={() => setLineMenu(null)}
-          items={[
-            {
-              label: t.diff.stageLine,
-              disabled: acting,
-              title: t.diff.stageLineHint,
-              onClick: () => stageOneLine(lineMenu.block, lineMenu.offset),
-            },
-            {
-              label: t.diff.discardLine,
-              danger: true,
-              disabled: acting,
-              separatorBefore: true,
-              title: t.diff.discardLineHint,
-              onClick: () => discardOneLine(lineMenu.line, lineMenu.block, lineMenu.offset),
-            },
-          ]}
+          items={(() => {
+            const targets = lineMenu.targets;
+            const many = targets.length > 1;
+            return [
+              {
+                label: many ? t.diff.stageLines(targets.length) : t.diff.stageLine,
+                disabled: acting,
+                title: many ? t.diff.stageLinesHint : t.diff.stageLineHint,
+                onClick: () => stageTargets(targets),
+              },
+              {
+                label: many ? t.diff.discardLines(targets.length) : t.diff.discardLine,
+                danger: true,
+                disabled: acting,
+                separatorBefore: true,
+                title: many ? t.diff.discardLinesHint : t.diff.discardLineHint,
+                onClick: () => discardTargets(targets),
+              },
+            ];
+          })()}
         />
       )}
       {showMarks && (
