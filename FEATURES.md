@@ -82,6 +82,8 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   including CRLF files and a missing final newline, are preserved, and a hunk whose file changed since the diff
   was shown is refused instead of applied to the wrong lines. New (untracked) files and binary files have no
   hunk buttons: stage the whole file from the list.
+- **Right-click an added or removed line** in the *unstaged* diff of a tracked file for **Stage line** (puts just that one line into the staging area; the rest of its
+  hunk stays unstaged, and **Undo** takes it back) and **Discard line** (not available yet: it is listed but greyed out). Context lines, the staged diff and new files have no line menu.
 - While you have uncommitted changes, a notice at the top of the panel says how many files
   changed in the working directory, with a **View changes** button that closes the commit view
   and returns to the staging panel (your draft commit message is kept). The × does the same.
@@ -325,7 +327,7 @@ Esc leaves text fields and the terminal alone, so it never interferes with typin
 
 - Tags in the sidebar
 - Merge and rebase as standalone actions, revert commit
-- Line-level (single line) staging and unstaging
+- Discarding and unstaging a single line (staging one is built)
 - A conflict-resolution UI (a pull that conflicts is cancelled and the repository left untouched)
 - Syntax highlighting and intra-line diff highlighting, side-by-side diff
 - Multiple remotes work, but only the target remote is used to publish new branches

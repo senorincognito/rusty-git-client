@@ -1,4 +1,4 @@
-//! Staging, unstaging and discarding a single hunk of a file's uncommitted changes.
+//! Staging, unstaging and discarding a single hunk of a file's uncommitted changes, and staging a single line.
 //!
 //! A hunk is a contiguous run of added/removed lines (see `DiffLine::block`). Instead of building
 //! and applying patches, the new contents are rebuilt line by line from the full-file diff:
@@ -55,15 +55,40 @@ fn locate(
 /// Puts hunk `block` of the file's unstaged changes into the index (the staging area), leaving
 /// the file on disk and the other hunks untouched.
 pub(crate) fn stage_hunk(repo: &Repository, path: &str, block: usize, id: &str) -> Result<(), String> {
+    stage_selected(repo, path, block, id, None)
+}
+
+/// Puts a single changed line into the index: the `line`-th added or removed line of hunk `block` (counted from 0
+/// within the hunk, the same in the full-file and the changes-only view). The rest of the hunk stays unstaged.
+pub(crate) fn stage_line(repo: &Repository, path: &str, block: usize, id: &str, line: usize) -> Result<(), String> {
+    stage_selected(repo, path, block, id, Some(line))
+}
+
+/// Stages the whole hunk (`only` None) or just one of its changed lines.
+fn stage_selected(repo: &Repository, path: &str, block: usize, id: &str, only: Option<usize>) -> Result<(), String> {
     let (diff, raw) = locate(repo, path, false, block, id)?;
+    // The diff line to stage when it is a single line (the `n`-th changed line of the hunk).
+    let target = match only {
+        None => None,
+        Some(n) => Some(
+            diff.lines
+                .iter()
+                .enumerate()
+                .filter(|(_, l)| l.block == Some(block) && matches!(l.kind, "add" | "del"))
+                .nth(n)
+                .map(|(i, _)| i)
+                .ok_or(STALE)?,
+        ),
+    };
     let rel = Path::new(path);
     let mut index = repo.index().map_err(err)?;
     let existing = index.get_path(rel, 0).ok_or(STALE)?;
 
-    // The index version, plus only the changes of this hunk.
+    // The index version, plus only the selected changes: a removed line that is selected drops out, an added one
+    // comes in; every other change stays as the index has it.
     let mut out: Vec<u8> = Vec::new();
-    for (line, bytes) in diff.lines.iter().zip(&raw) {
-        let mine = line.block == Some(block);
+    for (i, (line, bytes)) in diff.lines.iter().zip(&raw).enumerate() {
+        let mine = line.block == Some(block) && target.is_none_or(|t| t == i);
         match line.kind {
             "ctx" => out.extend_from_slice(bytes),
             "del" if !mine => out.extend_from_slice(bytes),
@@ -239,6 +264,23 @@ pub async fn stage_hunk_cmd(path: String, file: String, block: usize, block_id: 
     let label = format!("Stage a hunk of {}", crate::undo::describe_paths(std::slice::from_ref(&file)));
     crate::undo::recorded(&path.clone(), label, crate::undo::Kind::Index, || {
         blocking(path, move |r| stage_hunk(r, &file, block, &block_id))
+    })
+    .await
+}
+
+/// Stages a single changed line of a file's unstaged changes. `line` counts the added and removed lines of hunk `block`
+/// from 0. Same checks as for a whole hunk.
+#[tauri::command]
+pub async fn stage_line_cmd(
+    path: String,
+    file: String,
+    block: usize,
+    block_id: String,
+    line: usize,
+) -> Result<(), String> {
+    let label = format!("Stage a line of {}", crate::undo::describe_paths(std::slice::from_ref(&file)));
+    crate::undo::recorded(&path.clone(), label, crate::undo::Kind::Index, || {
+        blocking(path, move |r| stage_line(r, &file, block, &block_id, line))
     })
     .await
 }
@@ -541,6 +583,65 @@ mod tests {
         index.write().unwrap();
         assert!(unstage_hunk(&repo, "bin.dat", 0, "x").unwrap_err().contains("Binary"));
 
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stages_single_lines_of_a_hunk() {
+        let (dir, repo) = setup("line");
+        fs::write(dir.join("a.txt"), "a\nb\nc\nd\ne\n").unwrap();
+        commit_paths(&repo, &["a.txt"], "base");
+        // One hunk replaces b with B and c with C: lines of the hunk are -b, -c, +B, +C.
+        fs::write(dir.join("a.txt"), "a\nB\nC\nd\ne\n").unwrap();
+        let d = unstaged(&repo, "a.txt");
+        assert_eq!(d.blocks.len(), 1);
+        let kinds: Vec<_> = d.lines.iter().filter(|l| l.block == Some(0)).map(|l| (l.kind, l.text.as_str())).collect();
+        assert_eq!(kinds, [("del", "b"), ("del", "c"), ("add", "B"), ("add", "C")]);
+
+        // Only the added line B: the index keeps b and c and gains B.
+        stage_line(&repo, "a.txt", 0, &d.blocks[0], 2).unwrap();
+        assert_eq!(index_text(&repo, "a.txt"), "a\nb\nc\nB\nd\ne\n");
+        assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), "a\nB\nC\nd\ne\n"); // the file is untouched
+
+        // The old fingerprint no longer matches: nothing is applied on a stale diff.
+        assert!(stage_line(&repo, "a.txt", 0, &d.blocks[0], 0).unwrap_err().contains("changed since"));
+
+        // The refreshed diff: now the removed b (offset 0) can be staged, leaving c and C for later.
+        let d = unstaged(&repo, "a.txt");
+        // The context line B now separates the removals (hunk 0) from the added C (hunk 1).
+        assert_eq!(d.blocks.len(), 2);
+        let first: Vec<_> = d.lines.iter().filter(|l| l.block == Some(0)).map(|l| (l.kind, l.text.as_str())).collect();
+        assert_eq!(first, [("del", "b"), ("del", "c")]);
+        stage_line(&repo, "a.txt", 0, &d.blocks[0], 0).unwrap();
+        assert_eq!(index_text(&repo, "a.txt"), "a\nc\nB\nd\ne\n");
+
+        // An offset past the hunk's last changed line is refused.
+        let d = unstaged(&repo, "a.txt");
+        assert!(stage_line(&repo, "a.txt", 0, &d.blocks[0], 9).unwrap_err().contains("changed since"));
+
+        // Staging the rest one line at a time ends with the file fully staged.
+        loop {
+            let d = unstaged(&repo, "a.txt");
+            if d.blocks.is_empty() {
+                break;
+            }
+            stage_line(&repo, "a.txt", 0, &d.blocks[0], 0).unwrap();
+        }
+        assert_eq!(index_text(&repo, "a.txt"), "a\nB\nC\nd\ne\n");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn staging_a_line_keeps_crlf_endings() {
+        let (dir, repo) = setup("line-crlf");
+        fs::write(dir.join("a.txt"), "one\r\ntwo\r\nthree\r\n").unwrap();
+        commit_paths(&repo, &["a.txt"], "base");
+        fs::write(dir.join("a.txt"), "one\r\nTWO\r\nthree\r\nfour\r\n").unwrap();
+        let d = unstaged(&repo, "a.txt");
+        // Blocks: -two +TWO (0) and +four (1). Stage "+four" only.
+        assert_eq!(d.blocks.len(), 2);
+        stage_line(&repo, "a.txt", 1, &d.blocks[1], 0).unwrap();
+        assert_eq!(index_text(&repo, "a.txt"), "one\r\ntwo\r\nthree\r\nfour\r\n");
         let _ = fs::remove_dir_all(&dir);
     }
 }

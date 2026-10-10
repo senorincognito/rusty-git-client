@@ -148,6 +148,12 @@
     }
   }
 
+  // The line a context menu is open on.
+  &.ctx {
+    outline: 1px solid $accent;
+    outline-offset: -1px;
+  }
+
   &.hunk {
     background: $info-tint;
     color: $info;

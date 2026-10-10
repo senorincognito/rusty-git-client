@@ -54,3 +54,10 @@ export const discardHunk = (path: string, file: string, block: number, blockId: 
 /** Takes one hunk of a file's staged changes back out of the staging area. */
 export const unstageHunk = (path: string, file: string, block: number, blockId: string) =>
   invoke<void>("unstage_hunk_cmd", { path, file, block, blockId });
+
+/**
+ * Puts a single changed line of a file's unstaged changes into the staging area: the `line`-th added or removed line
+ * of hunk `block`, counted from 0 within the hunk. `blockId` is the hunk's fingerprint, as for a whole hunk.
+ */
+export const stageLine = (path: string, file: string, block: number, blockId: string, line: number) =>
+  invoke<void>("stage_line_cmd", { path, file, block, blockId, line });

@@ -58,6 +58,7 @@ pub fn run() {
             history::rename::get_rename_info,
             changes::hunks::discard_hunk_cmd,
             changes::hunks::stage_hunk_cmd,
+            changes::hunks::stage_line_cmd,
             changes::hunks::unstage_hunk_cmd,
             history::rename::rename_commit_message,
             history::rebase::get_rebase_plan,

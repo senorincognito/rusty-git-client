@@ -5,10 +5,12 @@ import {
   getFileDiff,
   getWorkingDiff,
   stageHunk,
+  stageLine,
   unstageHunk,
   type DiffLine,
   type FileDiff as FileDiffData,
 } from "@/api/diff";
+import ContextMenu from "@/components/ContextMenu";
 import FileBadge, { type FileStatus } from "@/components/FileBadge";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 import { usePersistentState } from "@/hooks/usePersistentState";
@@ -16,6 +18,8 @@ import { t } from "@/i18n";
 import "./FileDiff.scss";
 
 const ROW_H = 20;
+/** Rows of context left above a hunk or mark when jumping to it. */
+const CONTEXT = 2 * ROW_H;
 const OVERSCAN = 20;
 
 /** Where the diff comes from: a commit, or the staged / unstaged changes of the working tree. */
@@ -28,7 +32,7 @@ export interface DiffFile {
 }
 
 /** What the virtual list draws: a diff line, or the heading above a hunk. */
-type Row = { type: "line"; line: DiffLine } | { type: "hunk"; block: number; adds: number; dels: number };
+type Row = { type: "line"; line: DiffLine; idx: number } | { type: "hunk"; block: number; adds: number; dels: number };
 
 /**
  * The centre view for one file: its content with the added and removed lines marked in place
@@ -63,6 +67,8 @@ export default function FileDiff({
   const [diff, setDiff] = useState<FileDiffData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
+  // Right-click on a changed line: the line's hunk and its position among the hunk's changed lines.
+  const [lineMenu, setLineMenu] = useState<{ x: number; y: number; row: number; block: number; offset: number } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewH, setViewH] = useState(600);
@@ -149,12 +155,12 @@ export default function FileDiff({
     }
     const out: Row[] = [];
     let headed = -1;
-    for (const line of diff.lines) {
+    for (const [idx, line] of diff.lines.entries()) {
       if (line.block !== null && line.block !== headed) {
         headed = line.block;
         out.push({ type: "hunk", block: line.block, ...totals[line.block] });
       }
-      out.push({ type: "line", line });
+      out.push({ type: "line", line, idx });
     }
     return out;
   }, [diff]);
@@ -178,7 +184,6 @@ export default function FileDiff({
     rows.forEach((row, i) => row.type === "hunk" && tops.push(i * ROW_H));
     return tops;
   }, [rows]);
-  const CONTEXT = 2 * ROW_H;
   const maxScroll = Math.max(0, rows.length * ROW_H - viewH);
   const here = scrollTop + CONTEXT;
   const nextTop = scrollTop < maxScroll - 1 ? hunkTops.find((top) => top > here) : undefined;
@@ -195,7 +200,7 @@ export default function FileDiff({
       const targetTop = Math.max(0, fromIndex * ROW_H - CONTEXT);
       scroller.current?.scrollTo({ top: targetTop, behavior: "smooth" });
     },
-    [rows.length, viewH],
+    [],
   );
 
   // Hunks can be moved only in text diffs that are complete and not mid-conflict. Untracked files
@@ -221,6 +226,14 @@ export default function FileDiff({
   const stage = (block: number) => {
     if (diff) act(() => stageHunk(path, file.path, block, diff.blocks[block]));
   };
+
+  const stageOneLine = (block: number, offset: number) => {
+    if (diff) act(() => stageLine(path, file.path, block, diff.blocks[block], offset));
+  };
+
+  // A changed line's place within its hunk (0 = the hunk's first added or removed line).
+  const offsetInHunk = (idx: number, block: number) =>
+    (diff?.lines ?? []).slice(0, idx).filter((l) => l.block === block && (l.kind === "add" || l.kind === "del")).length;
 
   const unstage = (block: number) => {
     if (diff) act(() => unstageHunk(path, file.path, block, diff.blocks[block]));
@@ -351,7 +364,17 @@ export default function FileDiff({
               }
               const l = row.line;
               return (
-                <div key={`line-${first + i}`} className={`dl ${l.kind}`} style={{ top }}>
+                <div
+                  key={`line-${first + i}`}
+                  className={`dl ${l.kind}` + (lineMenu?.row === first + i ? " ctx" : "")}
+                  style={{ top }}
+                  onContextMenu={(e) => {
+                    // Only the unstaged changes of a tracked file can be staged line by line.
+                    if (!canStage || l.block === null || (l.kind !== "add" && l.kind !== "del")) return;
+                    e.preventDefault();
+                    setLineMenu({ x: e.clientX, y: e.clientY, row: first + i, block: l.block, offset: offsetInHunk(row.idx, l.block) });
+                  }}
+                >
                   {l.kind === "hunk" ? (
                     <span className="tx">{l.text}</span>
                   ) : (
@@ -368,6 +391,23 @@ export default function FileDiff({
           </div>
         )}
       </div>
+      {lineMenu && (
+        <ContextMenu
+          x={lineMenu.x}
+          y={lineMenu.y}
+          onClose={() => setLineMenu(null)}
+          items={[
+            {
+              label: t.diff.stageLine,
+              disabled: acting,
+              title: t.diff.stageLineHint,
+              onClick: () => stageOneLine(lineMenu.block, lineMenu.offset),
+            },
+            // Not built yet; listed so the two line actions sit together once it is.
+            { label: t.diff.discardLine, danger: true, disabled: true, title: t.diff.discardLineSoon },
+          ]}
+        />
+      )}
       {showMarks && (
         <div
           className="fd-marks"

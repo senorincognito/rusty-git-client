@@ -308,6 +308,7 @@ app rename so users keep their data. Don't change it casually.
   the index blob from the HEAD-to-index diff with that hunk reverted to HEAD's lines; if the file is not in HEAD
   (new file, or a branch without commits) and nothing is left, the index entry is removed, and a staged deletion
   is re-added from HEAD. The file on disk is never touched. Discarding a staged hunk is not offered.
+- **Stage line** (`stage_line_cmd` in `changes/hunks.rs`, right-click an add/del line in the unstaged diff of a tracked file; `FileDiff` `lineMenu`): `stage_selected` is `stage_hunk`'s code with a target line: the request names the hunk (`block` + fingerprint) and the line's position among the hunk's add/del lines (`offset`, identical in full-file and changes-only views, so the UI needs no mapping). The index blob is rebuilt from the full-file diff: context kept, a selected `del` dropped, a selected `add` taken in, every other change left as the index has it (so a removed line staged on its own leaves the replacement unstaged and vice versa). A wrong fingerprint or an offset past the hunk is refused as stale. One undo step (`Kind::Index`). *Discard line* is in the menu but disabled; the staged diff has no line menu yet.
 - In the full-file view `FileDiff` draws change markers over the vertical scrollbar (`.fd-marks`: runs of add/del rows as percentages of the
   virtual list, `pointer-events: none`, narrower than the 10px scrollbar so the thumb stays visible; shown only when the list scrolls).
 - `FileDiff` header ▲ / ▼ buttons jump between hunk heading rows (smooth scroll, two rows of context above; "where we are" = scrollTop + 2 rows, so
@@ -475,7 +476,7 @@ Release), and a Windows code-signing certificate to avoid the SmartScreen "unkno
 
 ## Not implemented yet
 
-Tags in the sidebar; line-level (single line) staging and unstaging; merge/rebase as standalone actions; discard
+Tags in the sidebar; discarding or unstaging a single line (staging one is built); merge/rebase as standalone actions; discard
 changes and stash; conflict resolution UI (pulls with conflicts are aborted); syntax highlighting and intra-line diff highlighting; side-by-side diff; a
 "you rewrote pushed history, force push instead" hint in the diverged-pull dialog; a conflict preview
 (`git merge-tree`) before pulling.
