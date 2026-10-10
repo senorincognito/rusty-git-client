@@ -429,6 +429,7 @@ export const en = {
     prevChange: "Previous change",
     nextChange: "Next change",
     changePosition: (at: number, total: number) => `${at} / ${total}`,
+    scrollToDiff: "Scroll to diff",
     closeHint: "Close the diff (Esc)",
     backHint: "Back to the commit graph (Esc)",
     back: "← Back",

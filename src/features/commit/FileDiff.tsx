@@ -189,6 +189,15 @@ export default function FileDiff({
   };
   const showMarks = full && marks.length > 0 && rows.length * ROW_H > viewH;
 
+  // Scroll to a specific row index when a mark is clicked.
+  const scrollToMark = useCallback(
+    (fromIndex: number) => {
+      const targetTop = Math.max(0, fromIndex * ROW_H - CONTEXT);
+      scroller.current?.scrollTo({ top: targetTop, behavior: "smooth" });
+    },
+    [rows.length, viewH],
+  );
+
   // Hunks can be moved only in text diffs that are complete and not mid-conflict. Untracked files
   // (unstaged "new") have no index version to build from; stage them whole from the list.
   const hunkable = diff !== null && !diff.binary && !diff.truncated && file.status !== "conflicted";
@@ -360,14 +369,39 @@ export default function FileDiff({
         )}
       </div>
       {showMarks && (
-        <div className="fd-marks" style={{ height: viewH }} aria-hidden="true">
-          {marks.map((m) => (
-            <span
-              key={m.from}
-              className={m.kind}
-              style={{ top: `${(m.from / rows.length) * 100}%`, height: `${(m.len / rows.length) * 100}%` }}
-            />
-          ))}
+        <div
+          className="fd-marks"
+          style={{ height: viewH }}
+          aria-hidden="true"
+          onClick={(e) => {
+            if (e.target !== e.currentTarget) {
+              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              const clickY = e.clientY - rect.top;
+              const clickPercent = Math.min(100, Math.max(0, (clickY / rect.height) * 100));
+              // Find the mark that contains this click position
+              for (const m of marks) {
+                const markFromPercent = (m.from / rows.length) * 100;
+                const markLenPercent = (m.len / rows.length) * 100;
+                if (clickPercent >= markFromPercent && clickPercent <= markFromPercent + markLenPercent) {
+                  scrollToMark(m.from);
+                  return;
+                }
+              }
+            }
+          }}
+        >
+          {marks.map((m) => {
+            const markFromPercent = (m.from / rows.length) * 100;
+            const markLenPercent = (m.len / rows.length) * 100;
+            return (
+              <span
+                key={m.from}
+                className={m.kind}
+                style={{ top: `${markFromPercent}%`, height: `${markLenPercent}%` }}
+                title={t.diff.scrollToDiff}
+              />
+            );
+          })}
         </div>
       )}
       </div>

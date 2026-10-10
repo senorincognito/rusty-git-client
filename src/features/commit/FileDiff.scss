@@ -235,7 +235,8 @@
   top: 0;
   right: 0;
   width: 10px;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: pointer;
 
   span {
     position: absolute;
