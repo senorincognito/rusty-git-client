@@ -36,12 +36,36 @@ export interface DiffFile {
 /** A changed line a context-menu action applies to: its row in the list, the line and how the backend addresses it. */
 interface LineTarget {
   row: number;
+  /** Side by side only: which half of the row. */
+  side?: "left" | "right";
   line: DiffLine;
   ref: LineRef;
 }
 
-/** What the virtual list draws: a diff line, or the heading above a hunk. */
-type Row = { type: "line"; line: DiffLine; idx: number } | { type: "hunk"; block: number; adds: number; dels: number };
+/** How the file is shown: whole, only the changes, or the old and the new file next to each other. */
+type Mode = "full" | "hunks" | "split";
+const isMode = (v: unknown): v is Mode => v === "full" || v === "hunks" || v === "split";
+
+/** The mode to start with: the saved one, else what the old "Full file" switch was set to. */
+function initialMode(): Mode {
+  try {
+    return JSON.parse(localStorage.getItem("diff.fullFile") ?? "true") === false ? "hunks" : "full";
+  } catch {
+    return "full";
+  }
+}
+
+/** One side of a side-by-side row: a line and its position in the diff's line list. */
+interface Side {
+  line: DiffLine;
+  idx: number;
+}
+
+/** What the virtual list draws: a diff line, the heading above a hunk, or (side by side) an old and a new line. */
+type Row =
+  | { type: "pair"; left: Side | null; right: Side | null }
+  | { type: "line"; line: DiffLine; idx: number }
+  | { type: "hunk"; block: number; adds: number; dels: number };
 
 /**
  * The centre view for one file: its content with the added and removed lines marked in place
@@ -72,7 +96,9 @@ export default function FileDiff({
   backLabel?: string;
   backHint?: string;
 }) {
-  const [full, setFull] = usePersistentState("diff.fullFile", true, (v): v is boolean => typeof v === "boolean");
+  const [mode, setMode] = usePersistentState<Mode>("diff.mode", initialMode(), isMode);
+  // Side by side also needs the whole file: the changes are matched up line by line against their surroundings.
+  const full = mode !== "hunks";
   const [diff, setDiff] = useState<FileDiffData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
@@ -154,7 +180,8 @@ export default function FileDiff({
     return () => ro.disconnect();
   }, []);
 
-  // Hunk headings go above the first changed line of each hunk.
+  // Hunk headings go above the first changed line of each hunk. Side by side, each run of removed lines is matched
+  // up with the run of added lines that follows it, one row per pair; the longer run leaves blanks opposite.
   const rows = useMemo<Row[]>(() => {
     if (!diff) return [];
     const totals = diff.blocks.map(() => ({ adds: 0, dels: 0 }));
@@ -165,25 +192,56 @@ export default function FileDiff({
     }
     const out: Row[] = [];
     let headed = -1;
-    for (const [idx, line] of diff.lines.entries()) {
-      if (line.block !== null && line.block !== headed) {
-        headed = line.block;
-        out.push({ type: "hunk", block: line.block, ...totals[line.block] });
+    const heading = (block: number | null) => {
+      if (block !== null && block !== headed) {
+        headed = block;
+        out.push({ type: "hunk", block, ...totals[block] });
       }
-      out.push({ type: "line", line, idx });
+    };
+    if (mode !== "split") {
+      for (const [idx, line] of diff.lines.entries()) {
+        heading(line.block);
+        out.push({ type: "line", line, idx });
+      }
+      return out;
     }
+    let dels: Side[] = [];
+    let adds: Side[] = [];
+    const flush = () => {
+      const count = Math.max(dels.length, adds.length);
+      if (count > 0) heading((dels[0] ?? adds[0]).line.block);
+      for (let i = 0; i < count; i++) out.push({ type: "pair", left: dels[i] ?? null, right: adds[i] ?? null });
+      dels = [];
+      adds = [];
+    };
+    for (const [idx, line] of diff.lines.entries()) {
+      if (line.kind === "del") dels.push({ line, idx });
+      else if (line.kind === "add") adds.push({ line, idx });
+      else {
+        flush();
+        if (line.kind === "ctx") out.push({ type: "pair", left: { line, idx }, right: { line, idx } });
+        else out.push({ type: "line", line, idx });
+      }
+    }
+    flush();
     return out;
-  }, [diff]);
+  }, [diff, mode]);
 
   // Overview of the changes for the scrollbar: runs of added or removed rows, as fractions of the whole list. Only
   // useful in the full-file view, where the changes sit between long stretches of unchanged code.
   const marks = useMemo(() => {
-    const out: { kind: "add" | "del"; from: number; len: number }[] = [];
+    const out: { kind: "add" | "del" | "mod"; from: number; len: number }[] = [];
     rows.forEach((row, i) => {
-      if (row.type !== "line" || (row.line.kind !== "add" && row.line.kind !== "del")) return;
+      let kind: "add" | "del" | "mod" | null = null;
+      if (row.type === "line" && (row.line.kind === "add" || row.line.kind === "del")) kind = row.line.kind;
+      // Side by side: a removed line facing an added one is a changed line.
+      else if (row.type === "pair" && row.left?.line.kind === "del" && row.right?.line.kind === "add") kind = "mod";
+      else if (row.type === "pair" && row.left?.line.kind === "del") kind = "del";
+      else if (row.type === "pair" && row.right?.line.kind === "add") kind = "add";
+      if (kind === null) return;
       const prev = out[out.length - 1];
-      if (prev && prev.kind === row.line.kind && prev.from + prev.len === i) prev.len += 1;
-      else out.push({ kind: row.line.kind, from: i, len: 1 });
+      if (prev && prev.kind === kind && prev.from + prev.len === i) prev.len += 1;
+      else out.push({ kind, from: i, len: 1 });
     });
     return out;
   }, [rows]);
@@ -279,12 +337,14 @@ export default function FileDiff({
   };
 
   // A row as an action target; None for anything that is not an added or removed line of a hunk.
-  const targetOf = (rowNo: number): LineTarget | null => {
+  const targetOf = (rowNo: number, side?: "left" | "right"): LineTarget | null => {
     const row = rows[rowNo];
-    if (!diff || !row || row.type !== "line") return null;
-    const line = row.line;
+    if (!diff || !row) return null;
+    const entry = row.type === "line" ? row : row.type === "pair" ? (side === "left" ? row.left : row.right) : null;
+    if (!entry) return null;
+    const line = entry.line;
     if (line.block === null || (line.kind !== "add" && line.kind !== "del")) return null;
-    return { row: rowNo, line, ref: { block: line.block, blockId: diff.blocks[line.block], line: offsetInHunk(row.idx, line.block) } };
+    return { row: rowNo, side, line, ref: { block: line.block, blockId: diff.blocks[line.block], line: offsetInHunk(entry.idx, line.block) } };
   };
 
   // A changed line's place within its hunk (0 = the hunk's first added or removed line).
@@ -311,6 +371,8 @@ export default function FileDiff({
   const lines = diff?.lines ?? [];
   const maxNo = lines.reduce((m, l) => Math.max(m, l.oldNo ?? 0, l.newNo ?? 0), 0);
   const gutter = `${Math.max(String(maxNo).length, 2) + 1}ch`;
+  // Side by side: each half is as wide as the longest line (so both scroll sideways together and stay aligned).
+  const columns = Math.min(300, lines.reduce((m, l) => Math.max(m, l.text.length), 40));
   const origin = source.kind === "commit" ? source.shortId : source.kind === "staged" ? t.diff.staged : t.diff.unstaged;
   const hunkCount = diff?.blocks.length ?? 0;
 
@@ -347,11 +409,19 @@ export default function FileDiff({
             <span className="fd-navpos">{t.diff.changePosition(hunksAbove, hunkTops.length)}</span>
           </span>
         )}
-        <label className="switch" title={t.diff.fullFileHint}>
-          <input type="checkbox" role="switch" checked={full} onChange={(e) => setFull(e.target.checked)} />
-          <span className="switch-track" aria-hidden="true" />
-          <span>{t.diff.fullFile}</span>
-        </label>
+        <span className="fd-modes" role="group" aria-label={t.diff.viewMode}>
+          {(["full", "hunks", "split"] as const).map((m) => (
+            <button
+              key={m}
+              className={"ghost" + (mode === m ? " active" : "")}
+              aria-pressed={mode === m}
+              title={t.diff.modeHint[m]}
+              onClick={() => setMode(m)}
+            >
+              {t.diff.mode[m]}
+            </button>
+          ))}
+        </span>
       </header>
       {actionError && <p className="fd-error">{actionError}</p>}
 
@@ -360,7 +430,7 @@ export default function FileDiff({
         className="fd-body"
         ref={scroller}
         onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
-        style={{ "--ln": gutter } as React.CSSProperties}
+        style={{ "--ln": gutter, "--cols": columns } as React.CSSProperties}
       >
         {error && <p className="error pad">{error}</p>}
         {!diff && !error && <p className="muted pad">{t.common.loading}</p>}
@@ -418,6 +488,35 @@ export default function FileDiff({
                   </div>
                 );
               }
+              if (row.type === "pair") {
+                const rowNo = first + i;
+                const half = (side: "left" | "right") => {
+                  const line = (side === "left" ? row.left : row.right)?.line;
+                  const number = side === "left" ? line?.oldNo : line?.newNo;
+                  return (
+                    <div
+                      className={`half ${side} ${line ? line.kind : "empty"}` + (lineMenu?.targets.some((x) => x.row === rowNo && x.side === side) ? " menu" : "")}
+                      onContextMenu={(e) => {
+                        // One changed line at a time here: a text selection would run across both halves.
+                        const own = canStage ? targetOf(rowNo, side) : null;
+                        if (!own) return;
+                        e.preventDefault();
+                        setLineMenu({ x: e.clientX, y: e.clientY, targets: [own] });
+                      }}
+                    >
+                      <span className="ln">{number ?? ""}</span>
+                      <span className="mk">{line?.kind === "add" ? "+" : line?.kind === "del" ? "-" : ""}</span>
+                      <span className="tx">{line ? line.text || " " : ""}</span>
+                    </div>
+                  );
+                };
+                return (
+                  <div key={`pair-${rowNo}`} data-row={rowNo} className="dl pair" style={{ top }}>
+                    {half("left")}
+                    {half("right")}
+                  </div>
+                );
+              }
               const l = row.line;
               return (
                 <div
@@ -434,7 +533,7 @@ export default function FileDiff({
                     const selected = selectedRows();
                     const targets =
                       selected.includes(first + i) && selected.length > 1
-                        ? selected.map(targetOf).filter((x): x is LineTarget => x !== null)
+                        ? selected.map((r) => targetOf(r)).filter((x): x is LineTarget => x !== null)
                         : [own];
                     setLineMenu({ x: e.clientX, y: e.clientY, targets: targets.length > 1 ? targets : [own] });
                   }}

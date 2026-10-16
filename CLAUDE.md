@@ -101,7 +101,7 @@ styles/                    global SCSS: tokens, mixins, base, buttons, switch, f
 ### Persisted state
 
 `recent_repos.json` and `repo_folder.json` (the start screen's folder of repositories, a JSON string) in the app data dir; `localStorage` keys `sidebarWidth`, `changesWidth`,
-`autoFetch.enabled` (default true), `autoFetch.seconds` (default 180), `diff.fullFile` (default true), `sectionHeight.<local|remotes|stashes>` (px), `changesSplit` (fraction).
+`autoFetch.enabled` (default true), `autoFetch.seconds` (default 180), `diff.mode` (`full` | `hunks` | `split`; falls back to the old `diff.fullFile` boolean when unset), `sectionHeight.<local|remotes|stashes>` (px), `changesSplit` (fraction).
 All of it is keyed by the bundle identifier `com.gitclient.app`, which is **deliberately unchanged** by the
 app rename so users keep their data. Don't change it casually.
 
@@ -317,7 +317,7 @@ app rename so users keep their data. Don't change it casually.
   repeated clicks always advance; disabled at the first/last hunk and when the list can't scroll further). No keyboard shortcut: ↑/↓ already move
   between files while a diff is open.
 - Commit detail diffs are against the **first parent**; renames detected; 2000-file and 20 000-line caps;
-  binary/over-5 MB files are not previewed. The diff view has a "Full file" switch (default on).
+  binary/over-5 MB files are not previewed. The diff view has three modes (`FileDiff` `mode`, header buttons, persisted as `diff.mode`): *Full file* (default), *Changes* (the backend's context-only diff) and *Side by side*. **Side by side** uses the full-file diff (`full = mode !== "hunks"`) and only changes how `rows` are built: `del`/`add` runs are flushed as `pair` rows (the i-th removed line next to the i-th added one, blanks opposite the longer run), context lines appear on both sides; hunk headings stay full-width rows, so hunk buttons, ▲/▼ navigation (`hunkTops`) and the virtual list (fixed `ROW_H`) are unchanged. Each half is `flex: 1 0 auto` with a min-width of the longest line (`--cols`, capped at 300) so the row scrolls as one. Line stage/discard work per half (`LineTarget.side`; `targetOf(row, side)`) but a single line at a time: the text-selection multi-select reads one `.tx` per row and would run across both halves. Scrollbar marks use `mod` for a removed line facing an added one.
 
 ## Pitfalls learned the hard way
 

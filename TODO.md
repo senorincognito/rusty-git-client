@@ -1,1 +1,0 @@
-- currently the diff view has a full file mode, showing the diffs in one view, a "hunk mode showing only the diffs, add a new thrid mode "split" showing the old file and new file side by side

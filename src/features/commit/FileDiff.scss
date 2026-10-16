@@ -197,6 +197,74 @@
   }
 }
 
+// Side by side: the old file on the left, the new one on the right. Both halves are as wide as the longest line, so
+// the row scrolls sideways as a whole and the two sides stay level.
+.dl.pair {
+  .half {
+    flex: 1 0 auto;
+    display: flex;
+    min-width: calc(var(--cols, 80) * 1ch + var(--ln) + 2ch + 28px);
+
+    &.left {
+      border-right: 1px solid $border;
+    }
+
+    &.add {
+      background: $added-tint;
+
+      .ln {
+        background: $added-tint-strong;
+      }
+
+      .mk {
+        color: $added;
+      }
+    }
+
+    &.del {
+      background: $removed-tint;
+
+      .ln {
+        background: $removed-tint-strong;
+      }
+
+      .mk {
+        color: $danger;
+      }
+    }
+
+    // Nothing on this side: the other side has an extra line.
+    &.empty {
+      background: repeating-linear-gradient(135deg, transparent 0 4px, $press-tint 4px 5px);
+    }
+
+    // The line a context menu is open on.
+    &.menu {
+      outline: 1px solid $accent;
+      outline-offset: -1px;
+    }
+  }
+}
+
+.fd-modes {
+  flex: none;
+  display: flex;
+  border: 1px solid $border;
+  border-radius: $radius-sm;
+  overflow: hidden;
+
+  .ghost {
+    padding: 2px 10px;
+    font-size: 12px;
+    border-radius: 0;
+
+    &.active {
+      background: $accent-tint;
+      color: $text;
+    }
+  }
+}
+
 // "Stage hunk" / "Discard hunk" in a hunk heading.
 .bk-btn {
   height: 16px;
@@ -257,6 +325,11 @@
 
     &.del {
       background: $danger;
+    }
+
+    // Side by side: a changed line (removed on the left, added on the right).
+    &.mod {
+      background: $warn;
     }
   }
 }

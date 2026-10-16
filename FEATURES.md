@@ -65,8 +65,11 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   Merge commits are shown against their first parent.
 - Click a changed file: the centre area shows the file with the commit's changes marked in
   place (added lines in green with `+`, removed lines in red with `-`, old and new line
-  numbers). A **Full file** switch toggles between the whole file and just the changed hunks
-  with three lines of context. Binary and very large files are not previewed, and diffs are
+  numbers). Three view buttons in the diff header choose how it is shown: **Full file** (the whole file, changes marked
+  in place), **Changes** (only the changed hunks with three lines of context) and **Side by side** (the old file on the left, the new file on the right, line by line: a removed
+  line faces the added line that replaced it, and a blank hatched area faces a line that only exists on the other side). The choice is remembered. In the side-by-side view both
+  halves scroll sideways together; right-click a changed half for **Stage line** / **Discard line** (one line at a time there, no text-selection of several lines), and the
+  hunk buttons and the ▲ / ▼ change navigation work as in the other views. The scrollbar marks are orange for a changed line (removed and added side by side). Binary and very large files are not previewed, and diffs are
   capped at 20,000 lines. In the full-file view, green and red marks along the scrollbar show where the added and removed lines are
   (the scrollbar itself still works as usual). The ▲ / ▼ buttons in the diff header jump to the previous / next change (hunk) and show
   which one you are at ("3 / 7"); a button is greyed out when there is nothing further in that direction. **Back to graph** returns to the commit graph exactly where you left it.
