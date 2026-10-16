@@ -185,7 +185,6 @@ export const en = {
     newBranch: "New branch…",
     newBranchHint: "Create a branch at the current commit and check it out",
     rename: "Rename branch",
-    renameCurrent: "The checked-out branch can't be renamed. Switch to another branch first.",
     delete: "Delete branch",
     deleteCurrent: "The checked-out branch can't be deleted. Switch to another branch first.",
     deleteTitle: "Delete branch",

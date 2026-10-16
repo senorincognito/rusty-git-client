@@ -262,8 +262,8 @@ app rename so users keep their data. Don't change it casually.
 - **Remote branch checkout** (`checkout_remote_branch`, double-click or first item of its menu): creates local `<name>` at the remote tip with
   upstream `<remote>/<name>` and checks it out safely (the new branch is removed again if the checkout fails); an existing local
   branch is reused only if it already tracks that remote branch, otherwise it errors rather than taking it over.
-- **Branch rename** (inline editor in the sidebar) is not allowed for the checked-out branch (local) or the
-  branch the checked-out branch tracks (remote). Remote rename = one atomic push of the new name plus
+- **Branch rename** (inline editor in the sidebar) works for every local branch, the checked-out one included (libgit2's `Branch::rename` moves HEAD and the `branch.<n>.*` config with it; the files are untouched; the
+  remote-tracking branch it follows keeps its name), but is not allowed for the branch the checked-out branch tracks (remote). Remote rename = one atomic push of the new name plus
   deletion of the old one, guarded by a lease; local branches that tracked it are repointed.
 - **Working-tree diffs** (click a file in Changes): *unstaged* = index vs file on disk (untracked files show as
   all additions), *staged* = HEAD vs index (on an unborn branch everything staged is an addition). Staging

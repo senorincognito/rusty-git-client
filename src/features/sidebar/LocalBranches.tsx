@@ -286,10 +286,6 @@ export default function LocalBranches({
             {
               label: t.localBranches.rename,
               separatorBefore: true,
-              disabled: menu.branch.isHead,
-              title: menu.branch.isHead
-                ? t.localBranches.renameCurrent
-                : undefined,
               onClick: () => {
                 setError(null);
                 setEditing(menu.branch.name);

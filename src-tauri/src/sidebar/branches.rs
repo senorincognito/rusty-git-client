@@ -60,13 +60,11 @@ pub(crate) fn validate_branch_name(name: &str) -> Result<&str, String> {
     Ok(name)
 }
 
-/// Renames a local branch that is not checked out. Its upstream and branch settings move with it.
+/// Renames a local branch. Its upstream and branch settings move with it, and so does HEAD when it is the
+/// checked-out branch (the files are not touched).
 fn rename_branch(repo: &Repository, name: &str, new_name: &str) -> Result<(), String> {
     let new_name = validate_branch_name(new_name)?;
     let mut branch = repo.find_branch(name, BranchType::Local).map_err(|_| format!("Branch \"{name}\" not found"))?;
-    if branch.is_head() {
-        return Err("The checked-out branch can't be renamed here. Switch to another branch first.".into());
-    }
     if new_name == name {
         return Err("The name is unchanged".into());
     }
@@ -477,8 +475,7 @@ mod tests {
         repo.reference("refs/remotes/origin/other", c1, true, "test").unwrap();
         repo.find_branch("other", BranchType::Local).unwrap().set_upstream(Some("origin/other")).unwrap();
 
-        // Rules: not the checked-out branch, valid and free names only.
-        assert!(rename_branch(&repo, "main", "primary").unwrap_err().contains("checked-out"));
+        // Rules: valid and free names only.
         assert!(rename_branch(&repo, "nope", "x").unwrap_err().contains("not found"));
         assert!(rename_branch(&repo, "other", "taken").unwrap_err().contains("already exists"));
         assert!(rename_branch(&repo, "other", "other").unwrap_err().contains("unchanged"));
@@ -576,6 +573,37 @@ mod tests {
 
         // Only the listed names are considered.
         assert!(delete_synced(&repo, &[]).unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn renaming_the_checked_out_branch_moves_head_and_keeps_everything_else() {
+        let dir = std::env::temp_dir().join(format!("gc-rename-head-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let repo = Repository::init(&dir).unwrap();
+        let c1 = commit_files(&repo, "refs/heads/main", &[], &[("a.txt", "one")]);
+        repo.set_head("refs/heads/main").unwrap();
+        repo.remote("origin", "https://example.com/r.git").unwrap();
+        repo.reference("refs/remotes/origin/main", c1, true, "test").unwrap();
+        repo.find_branch("main", BranchType::Local).unwrap().set_upstream(Some("origin/main")).unwrap();
+        std::fs::write(dir.join("a.txt"), "edited").unwrap(); // uncommitted work must survive
+
+        rename_branch(&repo, "main", "primary").unwrap();
+
+        // HEAD follows the branch, the commit and the upstream are unchanged, the files untouched.
+        assert_eq!(repo.head().unwrap().shorthand(), Ok("primary"));
+        assert!(repo.find_branch("main", BranchType::Local).is_err());
+        let primary = repo.find_branch("primary", BranchType::Local).unwrap();
+        assert!(primary.is_head());
+        assert_eq!(primary.get().target(), Some(c1));
+        assert_eq!(primary.upstream().unwrap().name(), Ok(Some("origin/main")));
+        assert_eq!(std::fs::read_to_string(dir.join("a.txt")).unwrap(), "edited");
+
+        // A refused rename of the checked-out branch must not leave HEAD pointing at nothing.
+        repo.branch("feature/x", &repo.find_commit(c1).unwrap(), false).unwrap();
+        assert!(rename_branch(&repo, "primary", "feature").unwrap_err().contains("conflicts"));
+        assert_eq!(repo.head().unwrap().shorthand(), Ok("primary"));
+
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

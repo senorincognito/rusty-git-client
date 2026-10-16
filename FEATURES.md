@@ -277,7 +277,7 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   branches that already track something keep pushing and pulling there. Removing a remote asks first and only changes
   this repository's settings (its remote-tracking branches go, local branches that tracked it lose their upstream; nothing on the server is touched). A yellow ⚠ beside a remote's name means the last fetch
   failed (hover it for git's message); it disappears after the next successful fetch, pull or background fetch.
-- **Context menus** on branches: *Rename branch* and *Delete branch* (both disabled for the
+- **Context menus** on branches: *Rename branch* (also for the checked-out branch: HEAD follows it, your files and its upstream settings are untouched) and *Delete branch* (disabled for the
   checked-out branch), and on remote branches *Check out* (also a double-click on the branch: creates a local branch of the same name that tracks it, or switches to it if it already does; refuses when a same-named local branch tracks something else, and keeps your local changes safe like any checkout), *Rename remote branch* and *Delete remote branch* (both disabled for
   the branch the checked-out branch tracks). Renaming edits the name inline (Enter confirms,
   Esc cancels). A remote rename asks first, pushes the new name and deletes the old one in one
