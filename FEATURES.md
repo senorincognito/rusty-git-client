@@ -200,6 +200,13 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   leaves out every later change to the file (the title says "File history up to <id>"); the file is followed back across renames from the name it had in that commit.
   Not offered for stash files, and not while the interactive rebase screen is open.
 
+## Rebasing onto a branch
+- Right-click a **local branch** and choose **Rebase `<current>` onto `<branch>`**: the checked-out branch's own commits are replayed on top of that branch (they get new ids), like
+  `git rebase <branch>`. A dialog asks first and says how many commits are replayed, how many of them are already pushed (a force push is needed afterwards) and whether merge
+  commits among them get flattened. A branch with no commits of its own just moves forward; one that is already based on the target reports that nothing was done. Uncommitted
+  changes are set aside and restored. Conflicts are not resolved in the app yet: the rebase is cancelled, the conflicting files are named and nothing changes. **Undo** takes a rebase
+  back. Not available on a detached HEAD. (Rewriting your own history by hand is in *Interactive rebase*.)
+
 ## Fast-forward
 - Right-click a **local branch** and choose **Fast-forward <current> to <branch>**, or right-click a **commit** in the graph and choose
   **Fast-forward to this commit**: the checked-out branch moves forward to it, like `git merge --ff-only`, and your files are updated.

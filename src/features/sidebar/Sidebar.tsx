@@ -19,6 +19,7 @@ export default function Sidebar({
   onAllStashesDropped,
   onFastForward,
   onMerge,
+  onRebaseOnto,
 }: {
   path: string;
   refreshKey: number;
@@ -40,6 +41,8 @@ export default function Sidebar({
   onFastForward: (target: string) => void;
   /** Merge the branch (full ref name, display name) into the checked-out branch. */
   onMerge: (target: string, source: string) => void;
+  /** Rebase the checked-out branch onto this branch (full ref name, display name). */
+  onRebaseOnto: (target: string, source: string) => void;
 }) {
   // One filter for every list below: local branches, remote branches and stashes.
   const [filter, setFilter] = useState("");
@@ -68,7 +71,7 @@ export default function Sidebar({
             </button>
           )}
         </div>
-        <LocalBranches path={path} refreshKey={refreshKey} onChanged={onChanged} filter={filter} onFastForward={onFastForward} onMerge={onMerge} />
+        <LocalBranches path={path} refreshKey={refreshKey} onChanged={onChanged} filter={filter} onFastForward={onFastForward} onMerge={onMerge} onRebaseOnto={onRebaseOnto} />
         <Remotes path={path} refreshKey={refreshKey} onChanged={onChanged} fetchError={fetchError} filter={filter} onMerge={onMerge} />
         <Stashes
           path={path}

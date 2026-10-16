@@ -27,6 +27,7 @@ export default function LocalBranches({
   filter,
   onFastForward,
   onMerge,
+  onRebaseOnto,
 }: {
   path: string;
   refreshKey: number;
@@ -37,6 +38,8 @@ export default function LocalBranches({
   onFastForward: (target: string) => void;
   /** Merge this branch (full ref name, display name) into the checked-out branch. */
   onMerge: (target: string, source: string) => void;
+  /** Rebase the checked-out branch onto this branch (full ref name, display name). */
+  onRebaseOnto: (target: string, source: string) => void;
 }) {
   const [branches, setBranches] = useState<BranchInfo[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -269,6 +272,16 @@ export default function LocalBranches({
                   ? t.localBranches.mergeDetached
                   : t.localBranches.mergeHint,
               onClick: () => onMerge(`refs/heads/${menu.branch.name}`, menu.branch.name),
+            },
+            {
+              label: t.localBranches.rebaseOnto(currentBranch ?? "…", menu.branch.name),
+              disabled: menu.branch.isHead || currentBranch === undefined,
+              title: menu.branch.isHead
+                ? t.localBranches.rebaseOntoCurrent
+                : currentBranch === undefined
+                  ? t.localBranches.rebaseOntoDetached
+                  : t.localBranches.rebaseOntoHint,
+              onClick: () => onRebaseOnto(`refs/heads/${menu.branch.name}`, menu.branch.name),
             },
             {
               label: t.localBranches.rename,

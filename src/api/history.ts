@@ -125,3 +125,25 @@ export type MergeOutcome = "upToDate" | "fastForward" | "merged";
 
 /** Merges a branch (full ref name) into the checked-out one. Conflicts cancel the merge and reject with the files named. */
 export const mergeBranch = (path: string, target: string) => invoke<MergeOutcome>("merge_branch_cmd", { path, target });
+
+export type RebaseOutcome = "upToDate" | "fastForward" | "rebased";
+
+export interface RebaseOntoInfo {
+  /** The checked-out branch. */
+  branch: string;
+  /** Its commits that the target lacks: these are replayed. */
+  ahead: number;
+  /** Commits of the target that the branch lacks. */
+  behind: number;
+  /** How many of the replayed commits are already on the branch's upstream (a force push is needed afterwards). */
+  pushed: number;
+  /** Merge commits among the replayed ones (a plain rebase flattens them). */
+  merges: number;
+}
+
+/** What rebasing the checked-out branch onto a branch (full ref name) would replay. */
+export const getRebaseOntoInfo = (path: string, target: string) =>
+  invoke<RebaseOntoInfo>("get_rebase_onto_info", { path, target });
+
+/** Rebases the checked-out branch onto a branch (full ref name). Conflicts cancel it and reject with the files named. */
+export const rebaseOnto = (path: string, target: string) => invoke<RebaseOutcome>("rebase_onto_cmd", { path, target });

@@ -32,6 +32,8 @@ pub fn run() {
             commit::file_history::get_file_history,
             graph::fast_forward::fast_forward_cmd,
             graph::merge::merge_branch_cmd,
+            graph::rebase_onto::get_rebase_onto_info,
+            graph::rebase_onto::rebase_onto_cmd,
             sidebar::branches::checkout_local_branch,
             sidebar::branches::checkout_remote_branch,
             sidebar::branches::count_unmerged_commits,

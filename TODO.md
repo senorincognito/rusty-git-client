@@ -1,0 +1,1 @@
+- enable branch renaming on the current branch

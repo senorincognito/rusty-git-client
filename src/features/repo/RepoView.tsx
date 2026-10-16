@@ -6,7 +6,7 @@ import { confirmDialog, showError, showInfo } from "@/api/dialog";
 import { checkoutLocalBranch, checkoutRemoteBranch } from "@/api/branches";
 import type { RefLabel } from "@/api/graph";
 import { applyStash, dropStash, popStash } from "@/api/stash";
-import { dropLatestCommit, fastForward, getDropInfo, getResetInfo, mergeBranch, resetToCommit, type ResetMode } from "@/api/history";
+import { dropLatestCommit, fastForward, getDropInfo, getRebaseOntoInfo, getResetInfo, mergeBranch, rebaseOnto, resetToCommit, type ResetMode } from "@/api/history";
 import { openRepo, type RepoInfo } from "@/api/repo";
 import { unwatchRepo, watchRepo } from "@/api/watch";
 import { useWorkingChangeCount } from "@/hooks/useWorkingChangeCount";
@@ -152,6 +152,22 @@ export default function RepoView({
     }
   };
 
+  // Right-click > Rebase on a local branch: replay the checked-out branch on top of it, after a confirmation.
+  const rebaseOntoBranch = async (target: string, source: string) => {
+    try {
+      const info = await getRebaseOntoInfo(path, target);
+      const ok = await confirmDialog(t.repo.rebaseOntoConfirm(info, source), t.repo.rebaseOntoTitle, info.pushed > 0, t.repo.rebaseOntoOk);
+      if (!ok) return;
+      const outcome = await rebaseOnto(path, target);
+      closeCommit(); // the commits that were replayed have new ids
+      setOpenWorkingFile(null);
+      reload();
+      if (outcome === "upToDate") await showInfo(t.repo.rebaseOntoUpToDate(source), t.repo.rebaseOntoTitle);
+    } catch (e) {
+      await showError(String(e), t.repo.rebaseOntoTitle);
+    }
+  };
+
   // Right-click on a stash in the graph: apply it (keeping it), pop it, or delete it after a confirmation.
   const stashAction = async (action: "apply" | "pop" | "drop", stash: { id: string; label: string; message: string }) => {
     try {
@@ -267,6 +283,7 @@ export default function RepoView({
               }}
               onFastForward={fastForwardTo}
               onMerge={mergeInto}
+              onRebaseOnto={rebaseOntoBranch}
               onStashApplied={reload}
               onAllStashesDropped={(ids) => {
                 if (selectedCommit && ids.includes(selectedCommit.id)) closeCommit();

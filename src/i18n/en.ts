@@ -143,6 +143,10 @@ export const en = {
     mergeHint: "Merge this branch into the checked-out branch (asks first)",
     mergeCurrent: "This branch is checked out: pick another branch to merge into it",
     mergeDetached: "HEAD is detached: check out a branch to merge into it",
+    rebaseOnto: (current: string, name: string) => `Rebase ${current} onto ${name}`,
+    rebaseOntoHint: "Replay the checked-out branch's own commits on top of this branch (asks first)",
+    rebaseOntoCurrent: "This branch is checked out: pick another branch to rebase onto",
+    rebaseOntoDetached: "HEAD is detached: check out a branch to rebase it",
     fastForwardDetached: "HEAD is detached: check out a branch to fast-forward it",
     folderCount: (n: number) => plural(n, "branch", "branches"),
     current: (name: string) => `${name} (current)`,
@@ -513,6 +517,23 @@ export const en = {
     stashTitle: "Stash",
     fastForwardTitle: "Fast-forward",
     mergeTitle: "Merge",
+    rebaseOntoTitle: "Rebase",
+    rebaseOntoOk: "Rebase",
+    rebaseOntoConfirm: (info: { branch: string; ahead: number; behind: number; pushed: number; merges: number }, source: string) =>
+      [
+        `Rebase "${info.branch}" onto "${source}"?`,
+        "",
+        info.ahead === 0
+          ? `"${info.branch}" has no commits of its own, so it simply moves forward to "${source}".`
+          : `The ${info.ahead === 1 ? "1 commit" : `${info.ahead} commits`} on "${info.branch}" that "${source}" does not have ${info.ahead === 1 ? "is" : "are"} replayed on top of it and get new ids.`,
+        ...(info.pushed > 0
+          ? ["", `${info.pushed === 1 ? "1 of them is" : `${info.pushed} of them are`} already pushed: you will need a force push afterwards.`]
+          : []),
+        ...(info.merges > 0 ? ["", `${info.merges === 1 ? "A merge commit" : `${info.merges} merge commits`} among them will be flattened.`] : []),
+        "",
+        "Uncommitted changes are set aside and restored. If there are conflicts the rebase is cancelled and nothing is changed. Undo takes it back.",
+      ].join("\n"),
+    rebaseOntoUpToDate: (source: string) => `The checked-out branch is already based on "${source}". Nothing to rebase.`,
     mergeConfirm: (source: string) =>
       `Merge "${source}" into the checked-out branch?\n\nA merge commit is created unless the branch can simply be fast-forwarded. Uncommitted changes are set aside and restored. If there are conflicts the merge is cancelled and nothing is changed.`,
     mergeOk: "Merge",
