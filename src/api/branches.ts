@@ -19,6 +19,9 @@ export const createBranch = (path: string, name: string) =>
 export const checkoutLocalBranch = (path: string, name: string) =>
   invoke<void>("checkout_local_branch", { path, name });
 
+/** Detaches HEAD at a commit (hex id); rejects if local changes would be overwritten. */
+export const checkoutCommit = (path: string, id: string) => invoke<void>("checkout_commit_cmd", { path, id });
+
 /** Checks out a remote branch as a local branch of the same name that tracks it (created if needed). */
 export const checkoutRemoteBranch = (path: string, remote: string, name: string) =>
   invoke<void>("checkout_remote_branch", { path, remote, name });

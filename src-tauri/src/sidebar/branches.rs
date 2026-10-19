@@ -180,6 +180,37 @@ pub async fn checkout_local_branch(path: String, name: String) -> Result<(), Str
     .await
 }
 
+/// Detaches HEAD at commit `id` and updates the files, like `git checkout <id>`. Safe: uncommitted changes that the
+/// target would overwrite stop it before anything moves.
+fn checkout_commit(repo: &Repository, id: &str) -> Result<(), String> {
+    let oid = git2::Oid::from_str(id).map_err(|_| format!("\"{id}\" is not a commit id"))?;
+    let commit = repo.find_commit(oid).map_err(|_| format!("Commit {id} was not found"))?;
+    if crate::sidebar::stash::stash_index_of(repo, oid).is_some() {
+        return Err("A stash can't be checked out".into());
+    }
+    let mut opts = CheckoutBuilder::new();
+    opts.safe();
+    repo.checkout_tree(commit.as_object(), Some(&mut opts)).map_err(|e| {
+        if e.code() == git2::ErrorCode::Conflict {
+            "Your local changes would be overwritten by this checkout. Commit or discard them first.".to_string()
+        } else {
+            err(e)
+        }
+    })?;
+    repo.set_head_detached(oid).map_err(err)
+}
+
+#[tauri::command]
+pub async fn checkout_commit_cmd(path: String, id: String) -> Result<(), String> {
+    let label = format!("Check out {}", &id[..7.min(id.len())]);
+    crate::undo::recorded(&path.clone(), label, crate::undo::Kind::Switch, || async move {
+        tauri::async_runtime::spawn_blocking(move || checkout_commit(&Repository::discover(&path).map_err(err)?, &id))
+            .await
+            .map_err(|e| e.to_string())?
+    })
+    .await
+}
+
 /// Checks out the remote branch `remote/name` as a local branch of the same name that tracks it, like
 /// `git switch name` does. An existing local branch of that name is used when it already tracks the remote
 /// branch. If the checkout fails (local changes in the way) nothing is left behind.
@@ -311,6 +342,25 @@ pub async fn delete_synced_branches(path: String, names: Vec<String>) -> Result<
 mod tests {
     use super::*;
     use git2::Signature;
+
+    #[test]
+    fn checks_out_a_commit_detached() {
+        use crate::history::test_support::{commit_file, new_repo};
+        let (dir, repo) = new_repo("checkout-commit");
+        let a = commit_file(&repo, &dir, "f.txt", "a", "A");
+        let b = commit_file(&repo, &dir, "f.txt", "b", "B");
+        assert!(checkout_commit(&repo, "nope").unwrap_err().contains("not a commit id"));
+        checkout_commit(&repo, &a.to_string()).unwrap();
+        assert!(repo.head_detached().unwrap());
+        assert_eq!(repo.head().unwrap().peel_to_commit().unwrap().id(), a);
+        assert_eq!(std::fs::read_to_string(dir.join("f.txt")).unwrap(), "a");
+
+        // A local edit the checkout would overwrite stops it.
+        std::fs::write(dir.join("f.txt"), "mine").unwrap();
+        assert!(checkout_commit(&repo, &b.to_string()).unwrap_err().contains("local changes"));
+        assert_eq!(repo.head().unwrap().peel_to_commit().unwrap().id(), a);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn lists_branches_alphabetically_and_flags_head() {

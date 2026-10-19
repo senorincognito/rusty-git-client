@@ -3,10 +3,10 @@ import { listen } from "@tauri-apps/api/event";
 import type { ChangeKind } from "@/api/changes";
 import type { CommitFile, HistoryEntry } from "@/api/commit";
 import { confirmDialog, showError, showInfo } from "@/api/dialog";
-import { checkoutLocalBranch, checkoutRemoteBranch } from "@/api/branches";
+import { checkoutCommit, checkoutLocalBranch, checkoutRemoteBranch } from "@/api/branches";
 import type { RefLabel } from "@/api/graph";
 import { applyStash, dropStash, popStash } from "@/api/stash";
-import { dropLatestCommit, fastForward, getDropInfo, getRebaseOntoInfo, getResetInfo, mergeBranch, rebaseOnto, resetToCommit, type ResetMode } from "@/api/history";
+import { cherryPick, dropLatestCommit, fastForward, getDropInfo, getRebaseOntoInfo, getResetInfo, mergeBranch, rebaseOnto, resetToCommit, revertCommit, type ResetMode } from "@/api/history";
 import { openRepo, type RepoInfo } from "@/api/repo";
 import { unwatchRepo, watchRepo } from "@/api/watch";
 import { useWorkingChangeCount } from "@/hooks/useWorkingChangeCount";
@@ -136,6 +136,31 @@ export default function RepoView({
       reload();
     } catch (e) {
       await showError(String(e), t.repo.checkoutTitle);
+    }
+  };
+
+  // Right-click > Checkout this commit: detach HEAD there.
+  const checkoutAt = async (commit: { id: string; shortId: string }) => {
+    try {
+      await checkoutCommit(path, commit.id);
+      setOpenWorkingFile(null);
+      reload();
+    } catch (e) {
+      await showError(String(e), t.repo.checkoutTitle);
+    }
+  };
+
+  // Right-click > Cherry pick / Revert: a new commit on the checked-out branch, after a confirmation.
+  const pickOrRevert = async (commit: { id: string; shortId: string }, kind: "pick" | "revert") => {
+    const title = kind === "pick" ? t.repo.cherryPickTitle : t.repo.revertTitle;
+    try {
+      const text = kind === "pick" ? t.repo.cherryPickConfirm(commit.shortId) : t.repo.revertConfirm(commit.shortId);
+      if (!(await confirmDialog(text, title, false, title))) return;
+      await (kind === "pick" ? cherryPick : revertCommit)(path, commit.id);
+      setOpenWorkingFile(null);
+      reload();
+    } catch (e) {
+      await showError(String(e), title);
     }
   };
 
@@ -316,6 +341,10 @@ export default function RepoView({
                   onDropCommit={dropCommit}
                   onResetCommit={resetCommit}
                   onFastForward={(c) => fastForwardTo(c.id)}
+                  onCheckoutCommit={checkoutAt}
+                  onCherryPick={(c) => pickOrRevert(c, "pick")}
+                  onRevert={(c) => pickOrRevert(c, "revert")}
+                  detached={repo.detached}
                   onStashAction={stashAction}
                   onCheckout={checkoutRef}
                   hasChanges={changeCount > 0}

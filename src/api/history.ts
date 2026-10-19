@@ -121,6 +121,12 @@ export const resetToCommit = (path: string, id: string, mode: ResetMode) =>
 /** Moves the checked-out branch forward to a commit id or full ref name; resolves to the number of commits gained. */
 export const fastForward = (path: string, target: string) => invoke<number>("fast_forward_cmd", { path, target });
 
+/** Applies a commit (hex id) on top of the checked-out branch. Conflicts cancel it and reject with the files named. */
+export const cherryPick = (path: string, id: string) => invoke<void>("cherry_pick_cmd", { path, id });
+
+/** Reverses a commit (hex id) with a new commit on the checked-out branch. Conflicts cancel it like cherryPick. */
+export const revertCommit = (path: string, id: string) => invoke<void>("revert_commit_cmd", { path, id });
+
 export type MergeOutcome = "upToDate" | "fastForward" | "merged";
 
 /** Merges a branch (full ref name) into the checked-out one. Conflicts cancel the merge and reject with the files named. */

@@ -125,6 +125,9 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   end there, to the remote branch (a local branch that tracks it is created, like checking it out from the sidebar). With several remote branches and no local one,
   double-click does nothing and the menu lets you choose. The checked-out branch is not offered. A checkout never overwrites uncommitted changes; if they are in the way
   you get an error and nothing changes. **Undo** switches back.
+- Right-click a commit: **Checkout this commit** (detaches HEAD there; safe, uncommitted changes in the way stop it), **Cherry pick this commit** and
+  **Revert commit** (each asks first, then adds a new commit on the checked-out branch; merge commits use their first parent; a conflict cancels it and
+  names the files; both need a checked-out branch; Undo takes them back) and **Copy commit SHA** (full id to the clipboard).
 - Right-click a commit: **Rename commit** opens an editor in the right panel with the full
   message and **Update** / **Cancel** buttons (Esc cancels, Ctrl+Enter updates). Only
   commits on the current branch can be renamed.

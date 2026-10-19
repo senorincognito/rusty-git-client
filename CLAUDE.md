@@ -51,6 +51,7 @@ the module path to be visible from the crate root.
 | `graph/mod.rs` | `features/graph` | `get_graph`: revwalk over all refs, lane layout computed in Rust, `on_head` flag per row |
 | `graph/fast_forward.rs` | graph + branch context menus | `fast_forward_cmd`: move the checked-out branch forward to a commit id or full ref name |
 | `graph/merge.rs` | branch context menus | `merge_branch_cmd`: merge a branch (full ref name) into the checked-out one via system git; returns `upToDate`/`fastForward`/`merged` |
+| `graph/pick.rs` | graph context menu | `cherry_pick_cmd`, `revert_commit_cmd`: system git `cherry-pick`/`revert --no-edit` (`-m 1` for merge commits); a conflict is aborted with `<op> --abort` (`cancel_unfinished` only knows merge/rebase) and the files named; `Kind::Switch`. "Checkout this commit" is `checkout_commit_cmd` in `sidebar/branches.rs` (safe checkout + detached HEAD); "Copy commit SHA" is frontend-only (`navigator.clipboard`) |
 | `graph/rebase_onto.rs` | local branch context menu | `get_rebase_onto_info` (commits replayed, pushed, merges for the confirmation), `rebase_onto_cmd`: `git rebase --autostash <ref>` of the checked-out branch onto a branch (full ref name); returns `upToDate`/`fastForward`/`rebased` |
 | `graph/reset.rs` | graph context menu | `get_reset_info` (what a reset would remove/add, pushed count, uncommitted files), `reset_to_commit` (soft/mixed/hard) |
 | `history/mod.rs` | graph context menu | shared by the rewrites below: `is_pushed`, `rewrite_plan`, `rebuild_with_messages`, `move_head_to`, `blocking` |

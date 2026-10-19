@@ -88,9 +88,13 @@ export default function Graph({
   onDropCommit,
   onResetCommit,
   onFastForward,
+  onCheckoutCommit,
+  onCherryPick,
+  onRevert,
   onStashAction,
   onCheckout,
   hasChanges,
+  detached,
 }: {
   path: string;
   refreshKey?: number;
@@ -109,12 +113,20 @@ export default function Graph({
   /** Reset the branch to a commit (soft, mixed or hard). */
   onResetCommit: (commit: { id: string; shortId: string }, mode: ResetMode) => void;
   onFastForward: (commit: { id: string; shortId: string }) => void;
+  /** Detach HEAD at this commit. */
+  onCheckoutCommit: (commit: { id: string; shortId: string }) => void;
+  /** Copy this commit onto the checked-out branch. */
+  onCherryPick: (commit: { id: string; shortId: string }) => void;
+  /** Add a commit that undoes this one. */
+  onRevert: (commit: { id: string; shortId: string }) => void;
   /** Right-click on a stash: apply, pop or delete it. */
   onStashAction: (action: "apply" | "pop" | "drop", stash: { id: string; label: string; message: string }) => void;
   /** Check out the branch whose tip this is (a local branch, or a remote one that becomes a local branch). */
   onCheckout: (ref: RefLabel) => void;
   /** There are uncommitted changes, so a stash can't be applied cleanly. */
   hasChanges: boolean;
+  /** HEAD is detached, so a cherry-pick or revert has no branch to land on. */
+  detached: boolean;
 }) {
   const [graph, setGraph] = useState<GraphData | null>(null);
   const [limit, setLimit] = useState(PAGE);
@@ -328,8 +340,33 @@ export default function Graph({
           items={[
             ...checkoutItems(menu.row),
             {
+              label: t.graph.checkoutCommit,
+              disabled: isCurrent(menu.row),
+              title: t.graph.checkoutCommitHint,
+              onClick: () => onCheckoutCommit({ id: menu.row.id, shortId: menu.row.shortId }),
+            },
+            {
+              label: t.graph.cherryPick,
+              disabled: detached,
+              title: detached ? t.graph.cherryPickDetached : t.graph.cherryPickHint,
+              onClick: () => onCherryPick({ id: menu.row.id, shortId: menu.row.shortId }),
+            },
+            {
+              label: t.graph.revert,
+              disabled: detached,
+              title: detached ? t.graph.cherryPickDetached : t.graph.revertHint,
+              onClick: () => onRevert({ id: menu.row.id, shortId: menu.row.shortId }),
+            },
+            {
+              label: t.graph.copySha,
+              title: t.graph.copyShaHint,
+              onClick: () => {
+                navigator.clipboard?.writeText(menu.row.id).catch(() => {});
+              },
+            },
+            {
               label: t.graph.rename,
-              separatorBefore: checkoutTargets(menu.row).length > 0,
+              separatorBefore: true,
               disabled: !menu.row.onHead,
               title: menu.row.onHead
                 ? undefined
