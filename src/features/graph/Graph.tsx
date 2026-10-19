@@ -93,6 +93,8 @@ export default function Graph({
   onRevert,
   onStashAction,
   onCheckout,
+  onMerge,
+  onRebaseOnto,
   hasChanges,
   detached,
 }: {
@@ -123,6 +125,10 @@ export default function Graph({
   onStashAction: (action: "apply" | "pop" | "drop", stash: { id: string; label: string; message: string }) => void;
   /** Check out the branch whose tip this is (a local branch, or a remote one that becomes a local branch). */
   onCheckout: (ref: RefLabel) => void;
+  /** Merge a branch (full ref name, display name) into the checked-out branch. */
+  onMerge: (target: string, source: string) => void;
+  /** Rebase the checked-out branch onto a branch (full ref name, display name). */
+  onRebaseOnto: (target: string, source: string) => void;
   /** There are uncommitted changes, so a stash can't be applied cleanly. */
   hasChanges: boolean;
   /** HEAD is detached, so a cherry-pick or revert has no branch to land on. */
@@ -250,6 +256,32 @@ export default function Graph({
     ];
   };
 
+  // "Merge" / "Rebase onto" for the same branches (never the checked-out one): one item, or a group when there are several.
+  const branchActionItems = (row: GraphRow): MenuItem[] => {
+    const targets = checkoutTargets(row);
+    const fullRef = (r: RefLabel) => (r.kind === "remote" ? `refs/remotes/${r.name}` : `refs/heads/${r.name}`);
+    const make = (
+      label: (name: string) => string,
+      group: string,
+      hint: string,
+      run: (target: string, source: string) => void,
+    ): MenuItem[] => {
+      const leaf = (r: RefLabel, text: string): MenuItem => ({
+        label: text,
+        disabled: detached,
+        title: detached ? t.graph.branchDetached : hint,
+        onClick: () => run(fullRef(r), r.name),
+      });
+      if (targets.length === 0) return [];
+      if (targets.length === 1) return [leaf(targets[0], label(targets[0].name))];
+      return [{ label: group, disabled: detached, title: detached ? t.graph.branchDetached : hint, children: targets.map((r) => leaf(r, r.name)) }];
+    };
+    return [
+      ...make(t.graph.mergeBranch, t.graph.mergeGroup, t.graph.mergeBranchHint, onMerge),
+      ...make(t.graph.rebaseBranch, t.graph.rebaseGroup, t.graph.rebaseBranchHint, onRebaseOnto),
+    ];
+  };
+
   const laneWidth = Math.min(Math.max(graph?.maxLanes ?? 1, 1), 24) * LANE_W + 4;
 
   if (error) return <p className="error pad">{error}</p>;
@@ -339,6 +371,7 @@ export default function Graph({
           onClose={closeMenu}
           items={[
             ...checkoutItems(menu.row),
+            ...branchActionItems(menu.row),
             {
               label: t.graph.checkoutCommit,
               disabled: isCurrent(menu.row),

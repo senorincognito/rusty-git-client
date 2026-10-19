@@ -400,6 +400,13 @@ export default function Remotes({
               onClick: () => onMerge(`refs/remotes/${menu.remote}/${menu.branch}`, `${menu.remote}/${menu.branch}`),
             },
             {
+              label: t.common.copyBranchName,
+              title: t.common.copyBranchNameHint,
+              onClick: () => {
+                navigator.clipboard?.writeText(`${menu.remote}/${menu.branch}`).catch(() => {});
+              },
+            },
+            {
               label: t.remotes.renameBranch,
               separatorBefore: true,
               disabled: busy !== null || branchRemote.trackedByHead === menu.branch,

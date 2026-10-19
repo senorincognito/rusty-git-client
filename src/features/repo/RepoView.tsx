@@ -347,6 +347,8 @@ export default function RepoView({
                   detached={repo.detached}
                   onStashAction={stashAction}
                   onCheckout={checkoutRef}
+                  onMerge={mergeInto}
+                  onRebaseOnto={rebaseOntoBranch}
                   hasChanges={changeCount > 0}
                 />
               </div>

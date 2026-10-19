@@ -128,6 +128,9 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
 - Right-click a commit: **Checkout this commit** (detaches HEAD there; safe, uncommitted changes in the way stop it), **Cherry pick this commit** and
   **Revert commit** (each asks first, then adds a new commit on the checked-out branch; merge commits use their first parent; a conflict cancels it and
   names the files; both need a checked-out branch; Undo takes them back) and **Copy commit SHA** (full id to the clipboard).
+- Right-click a commit that is the tip of another branch (local or remote): **Merge <branch> into the current branch** and **Rebase the current
+  branch onto <branch>** (same confirmations and conflict handling as in the sidebar; a submenu when several branches sit on the commit).
+- Right-click a branch in the sidebar (local or remote): **Copy branch name** puts the name (`feature/x`, `origin/feature/x`) on the clipboard.
 - Right-click a commit: **Rename commit** opens an editor in the right panel with the full
   message and **Update** / **Cancel** buttons (Esc cancels, Ctrl+Enter updates). Only
   commits on the current branch can be renamed.

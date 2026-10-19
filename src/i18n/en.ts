@@ -7,6 +7,8 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 
 export const en = {
   common: {
+    copyBranchName: "Copy branch name",
+    copyBranchNameHint: "Put the branch name on the clipboard",
     cancel: "Cancel",
     delete: "Delete",
     loading: "Loading…",
@@ -479,6 +481,13 @@ export const en = {
     noCommits: "No commits yet.",
     checkout: (name: string) => `Check out ${name}`,
     checkoutGroup: "Check out",
+    mergeBranch: (name: string) => `Merge ${name} into the current branch`,
+    mergeGroup: "Merge into the current branch",
+    mergeBranchHint: "Merge this branch into the checked-out branch (asks first)",
+    rebaseBranch: (name: string) => `Rebase the current branch onto ${name}`,
+    rebaseGroup: "Rebase the current branch onto",
+    rebaseBranchHint: "Replay the checked-out branch's own commits on top of this branch (asks first)",
+    branchDetached: "HEAD is detached: check out a branch first",
     checkoutHint: (name: string) => `Switch to ${name}. A remote branch becomes a local branch that tracks it. Double-click the commit to do the same.`,
     checkoutCommit: "Checkout this commit",
     checkoutCommitHint: "Detach HEAD at this commit. Uncommitted changes in the way stop it.",

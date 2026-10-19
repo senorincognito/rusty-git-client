@@ -284,6 +284,13 @@ export default function LocalBranches({
               onClick: () => onRebaseOnto(`refs/heads/${menu.branch.name}`, menu.branch.name),
             },
             {
+              label: t.common.copyBranchName,
+              title: t.common.copyBranchNameHint,
+              onClick: () => {
+                navigator.clipboard?.writeText(menu.branch.name).catch(() => {});
+              },
+            },
+            {
               label: t.localBranches.rename,
               separatorBefore: true,
               onClick: () => {
