@@ -309,6 +309,13 @@ export default function Graph({
 
   return (
     <div className="graph" ref={scroller} onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}>
+      {!graph && (
+        <div className="graph-loading" role="status">
+          <span className="spinner" aria-hidden="true" />
+          <strong>{t.graph.loading}</strong>
+          <span className="muted">{t.graph.loadingHint}</span>
+        </div>
+      )}
       <div style={{ height: rows.length * ROW_H, position: "relative" }}>
         {rows.slice(first, last).map((row, i) => (
           <div

@@ -218,6 +218,7 @@ export default function Changes({
   }, [selected]);
 
   const run = async (op: () => Promise<unknown>) => {
+    if (busy) return;
     setBusy(true);
     try {
       await op();
@@ -405,6 +406,12 @@ export default function Changes({
           </button>
         </div>
       </div>
+      {busy && (
+        <div className="changes-lock" role="status">
+          <span className="spinner" aria-hidden="true" />
+          <span>{t.changes.working}</span>
+        </div>
+      )}
       {menu && <ContextMenu x={menu.x} y={menu.y} onClose={closeMenu} items={menuItems(menu)} />}
       {stashOpen && (
         <StashDialog

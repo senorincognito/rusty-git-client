@@ -1,0 +1,17 @@
+@use "core" as *;
+
+// A small rotating ring for loading states.
+.spinner {
+  width: 26px;
+  height: 26px;
+  border: 3px solid $border;
+  border-top-color: $accent;
+  border-radius: 50%;
+  animation: spinner-rotate 0.8s linear infinite;
+}
+
+@keyframes spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}

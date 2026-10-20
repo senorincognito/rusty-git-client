@@ -28,21 +28,6 @@
   cursor: progress;
 }
 
-.sidebar-spinner {
-  width: 26px;
-  height: 26px;
-  border: 3px solid $border;
-  border-top-color: $accent;
-  border-radius: 50%;
-  animation: sidebar-spin 0.8s linear infinite;
-}
-
-@keyframes sidebar-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 // The filter field at the very top; it stays in view while the lists scroll.
 .sidefilter {
   position: sticky;

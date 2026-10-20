@@ -365,6 +365,7 @@ export const en = {
   },
 
   changes: {
+    working: "Updating…",
     unstaged: "Unstaged",
     staged: "Staged",
     stage: "Stage",
@@ -480,6 +481,8 @@ export const en = {
 
   graph: {
     noCommits: "No commits yet.",
+    loading: "Loading commits…",
+    loadingHint: "The first load of a large repository can take a few seconds.",
     checkout: (name: string) => `Check out ${name}`,
     checkoutGroup: "Check out",
     mergeBranch: (name: string) => `Merge ${name} into the current branch`,

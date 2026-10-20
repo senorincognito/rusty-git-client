@@ -94,7 +94,7 @@ export default function Sidebar({
       </nav>
       {switchingTo !== null && (
         <div className="sidebar-lock" role="status">
-          <span className="sidebar-spinner" aria-hidden="true" />
+          <span className="spinner" aria-hidden="true" />
           <strong>{t.sidebar.switching(switchingTo)}</strong>
           <span className="muted">{t.sidebar.switchingHint}</span>
         </div>

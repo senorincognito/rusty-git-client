@@ -3,6 +3,30 @@
 // The staging panel: file lists, then the commit box.
 .changes {
   @include panel-footprint;
+  position: relative;
+}
+
+// Covers the panel while stage / unstage / discard / commit runs. It fades in after a short delay, so quick
+// operations (most of them) never flash it.
+.changes-lock {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: color-mix(in srgb, #{$panel} 75%, transparent);
+  cursor: progress;
+  opacity: 0;
+  animation: changes-lock-in 0.15s ease-out 0.25s forwards;
+}
+
+@keyframes changes-lock-in {
+  to {
+    opacity: 1;
+  }
 }
 
 .commitbox {
