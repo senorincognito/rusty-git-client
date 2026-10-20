@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import type { ChangeKind } from "@/api/changes";
 import type { CommitFile, HistoryEntry } from "@/api/commit";
@@ -20,13 +20,14 @@ import Graph from "@/features/graph/Graph";
 import InteractiveRebase from "@/features/rebase/InteractiveRebase";
 import RenameCommit from "@/features/rename/RenameCommit";
 import Sidebar from "@/features/sidebar/Sidebar";
-import TerminalPanel from "@/features/terminal/TerminalPanel";
 import BranchButton from "@/features/toolbar/BranchButton";
 import SyncBar from "@/features/toolbar/SyncBar";
 import UndoButtons from "@/features/toolbar/UndoButtons";
 import { t } from "@/i18n";
 import { describeReset } from "./describeReset";
 import "./RepoView.scss";
+
+const TerminalPanel = lazy(() => import("@/features/terminal/TerminalPanel"));
 
 /** The screen for an open repository: title bar, sidebar, graph, changes and terminal. */
 export default function RepoView({
@@ -40,6 +41,12 @@ export default function RepoView({
 }) {
   const [graphKey, setGraphKey] = useState(0);
   const [terminalOpen, setTerminalOpen] = useState(false);
+  // xterm is the biggest dependency, so its code is fetched on the first open. After that the panel stays mounted
+  // (hidden) so the shell session survives closing it.
+  const [terminalLoaded, setTerminalLoaded] = useState(false);
+  useEffect(() => {
+    if (terminalOpen) setTerminalLoaded(true);
+  }, [terminalOpen]);
   // The Stash button in the title bar opens the same dialog as the one under the staging lists.
   const [stashOpen, setStashOpen] = useState(false);
   // Why the last fetch failed (shown as a warning beside "origin"), null while fetching works.
@@ -502,7 +509,11 @@ export default function RepoView({
           }}
         />
       )}
-      <TerminalPanel path={path} open={terminalOpen} onClose={() => setTerminalOpen(false)} />
+      {terminalLoaded && (
+        <Suspense fallback={null}>
+          <TerminalPanel path={path} open={terminalOpen} onClose={() => setTerminalOpen(false)} />
+        </Suspense>
+      )}
     </div>
   );
 }
