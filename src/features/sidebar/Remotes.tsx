@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { checkoutRemoteBranch, deleteMergedRemote, getMergedBranches } from "@/api/branches";
+import type { RefLabel } from "@/api/graph";
+import { deleteMergedRemote, getMergedBranches } from "@/api/branches";
 import { confirmDialog, showInfo } from "@/api/dialog";
 import {
   countUnmergedRemoteCommits,
@@ -24,6 +25,7 @@ export default function Remotes({
   path,
   refreshKey,
   onChanged,
+  onCheckout,
   fetchError,
   filter,
   onMerge,
@@ -31,6 +33,8 @@ export default function Remotes({
   path: string;
   refreshKey: number;
   onChanged: () => void;
+  /** Switch to this remote branch as a local branch (RepoView runs it and locks the panel meanwhile). */
+  onCheckout: (ref: RefLabel) => Promise<void>;
   /** Why the last fetch failed, if it did: shown as a warning beside each remote's name. */
   fetchError: string | null;
   /** Only branches whose name (or "remote/name") matches are listed; a remote whose own name matches shows all of its branches. */
@@ -188,18 +192,8 @@ export default function Remotes({
     }
   };
 
-  const checkOut = async (remote: string, branch: string) => {
-    if (busy !== null) return;
-    setBusy(t.remotes.checkingOut(`${remote}/${branch}`));
-    try {
-      await checkoutRemoteBranch(path, remote, branch);
-      setError(null);
-      onChanged();
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setBusy(null);
-    }
+  const checkOut = (remote: string, branch: string) => {
+    if (busy === null) void onCheckout({ name: `${remote}/${branch}`, kind: "remote", isHead: false });
   };
 
   // With a filter, a remote shows only the branches that match (all of them when its own name matches);

@@ -11,6 +11,38 @@
   overflow-y: auto;
 }
 
+// Covers the whole panel while a branch switch runs, so nothing in it can be used halfway through.
+.sidebar-lock {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px;
+  text-align: center;
+  overflow-wrap: anywhere;
+  background: color-mix(in srgb, #{$panel} 85%, transparent);
+  cursor: progress;
+}
+
+.sidebar-spinner {
+  width: 26px;
+  height: 26px;
+  border: 3px solid $border;
+  border-top-color: $accent;
+  border-radius: 50%;
+  animation: sidebar-spin 0.8s linear infinite;
+}
+
+@keyframes sidebar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 // The filter field at the very top; it stays in view while the lists scroll.
 .sidefilter {
   position: sticky;

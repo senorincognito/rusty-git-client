@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  checkoutLocalBranch,
   countUnmergedCommits,
   deleteLocalBranch,
   deleteMergedLocal,
@@ -15,6 +14,7 @@ import ContextMenu from "@/components/ContextMenu";
 import Section from "@/components/Section";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 import NewBranchForm from "@/features/toolbar/NewBranchForm";
+import type { RefLabel } from "@/api/graph";
 import { t } from "@/i18n";
 import BranchNameInput from "./BranchNameInput";
 import { buildRows, FolderRow, leafIndent, useClosedFolders } from "./branchTree";
@@ -24,6 +24,7 @@ export default function LocalBranches({
   path,
   refreshKey,
   onChanged,
+  onCheckout,
   filter,
   onFastForward,
   onMerge,
@@ -32,6 +33,8 @@ export default function LocalBranches({
   path: string;
   refreshKey: number;
   onChanged: () => void;
+  /** Switch to this branch (RepoView runs it and locks the panel meanwhile). */
+  onCheckout: (ref: RefLabel) => Promise<void>;
   /** Only branches whose name matches are listed. */
   filter: string;
   /** Fast-forward the checked-out branch to this ref name. */
@@ -57,19 +60,8 @@ export default function LocalBranches({
     }
   }, [path, start]);
 
-  const [switching, setSwitching] = useState(false);
-  const switchTo = async (b: BranchInfo) => {
-    if (b.isHead || switching) return;
-    setSwitching(true);
-    try {
-      await checkoutLocalBranch(path, b.name);
-      setError(null);
-      onChanged();
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setSwitching(false);
-    }
+  const switchTo = (b: BranchInfo) => {
+    if (!b.isHead) void onCheckout({ name: b.name, kind: "branch", isHead: false });
   };
 
   const shown = branches?.filter((b) => matchesFilter(filter, b.name));

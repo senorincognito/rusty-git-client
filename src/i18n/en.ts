@@ -131,6 +131,8 @@ export const en = {
     clearFilter: "Clear the filter",
     clearFilterHint: "Clear the filter (Esc)",
     branchNameLabel: "New branch name",
+    switching: (name: string) => `Switching to ${name}…`,
+    switchingHint: "Checking out the files. This can take a while in a large repository.",
   },
 
   localBranches: {
@@ -248,7 +250,6 @@ export const en = {
     merge: (full: string) => `Merge ${full} into the current branch`,
     mergeHint: "Merge this remote branch into the checked-out branch (asks first)",
     checkoutHint: (full: string) => `Double-click to check out ${full} as a local branch`,
-    checkingOut: (full: string) => `Checking out ${full}…`,
     renameBranch: "Rename remote branch",
     deleteBranch: "Delete remote branch",
     upstreamOfHead: "This is the upstream of the checked-out branch. Switch branches first.",

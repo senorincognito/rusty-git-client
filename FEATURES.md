@@ -124,7 +124,7 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   branches when several end at the same commit). **Double-clicking** the commit does the same: it switches to the local branch, or, when only remote branches
   end there, to the remote branch (a local branch that tracks it is created, like checking it out from the sidebar). With several remote branches and no local one,
   double-click does nothing and the menu lets you choose. The checked-out branch is not offered. A checkout never overwrites uncommitted changes; if they are in the way
-  you get an error and nothing changes. **Undo** switches back.
+  you get an error and nothing changes. **Undo** switches back. While a branch switch runs (from the graph or the sidebar) the whole left panel is locked and shows a loading state, and a failure is shown in a dialog.
 - Right-click a commit: **Checkout this commit** (detaches HEAD there; safe, uncommitted changes in the way stop it), **Cherry pick this commit** and
   **Revert commit** (each asks first, then adds a new commit on the checked-out branch; merge commits use their first parent; a conflict cancels it and
   names the files; both need a checked-out branch; Undo takes them back) and **Copy commit SHA** (full id to the clipboard).

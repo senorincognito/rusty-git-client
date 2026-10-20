@@ -124,7 +124,10 @@ export default function RepoView({
 
   // Right-click > Check out (or double-click) on a commit that is the tip of a branch. A remote branch ("origin/x") becomes
   // a local branch that tracks it, like checking it out from the sidebar.
+  const [switchingTo, setSwitchingTo] = useState<string | null>(null);
   const checkoutRef = async (ref: RefLabel) => {
+    if (switchingTo !== null) return;
+    setSwitchingTo(ref.name);
     try {
       if (ref.kind === "remote") {
         const slash = ref.name.indexOf("/");
@@ -136,6 +139,8 @@ export default function RepoView({
       reload();
     } catch (e) {
       await showError(String(e), t.repo.checkoutTitle);
+    } finally {
+      setSwitchingTo(null);
     }
   };
 
@@ -299,6 +304,8 @@ export default function RepoView({
               path={path}
               refreshKey={graphKey}
               onChanged={reload}
+              onCheckout={checkoutRef}
+              switchingTo={switchingTo}
               fetchError={fetchError}
               selectedId={selectedCommit?.id ?? null}
               onSelectCommit={selectCommit}
