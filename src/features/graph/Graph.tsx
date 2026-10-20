@@ -135,12 +135,15 @@ export default function Graph({
   detached: boolean;
 }) {
   const [graph, setGraph] = useState<GraphData | null>(null);
-  const [limit, setLimit] = useState(PAGE);
   const [error, setError] = useState<string | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewH, setViewH] = useState(600);
   const scroller = useRef<HTMLDivElement>(null);
   const loading = useRef(false);
+  // Bumped by every reload, so a page that was requested before it is dropped when it arrives.
+  const generation = useRef(0);
+  // Commits loaded so far (without the uncommitted-changes row): where the next page starts, and how much a reload asks for.
+  const loaded = useRef(0);
   const [focusTick, setFocusTick] = useState(0);
   const [menu, setMenu] = useState<{ x: number; y: number; row: GraphRow } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
@@ -148,22 +151,27 @@ export default function Graph({
   // Reset when switching repositories.
   useEffect(() => {
     setGraph(null);
-    setLimit(PAGE);
+    loaded.current = 0;
     setMenu(null);
     scroller.current?.scrollTo({ top: 0 });
   }, [path]);
 
+  // (Re)load everything shown so far in one request, so scrolling far down survives a refresh.
   useEffect(() => {
-    let stale = false;
+    const mine = ++generation.current;
     loading.current = true;
-    getGraph(path, limit)
-      .then((g) => !stale && (setGraph(g), setError(null)))
-      .catch((e) => !stale && setError(String(e)))
-      .finally(() => (loading.current = false));
-    return () => {
-      stale = true;
-    };
-  }, [path, limit, refreshKey, focusTick]);
+    getGraph(path, 0, Math.max(PAGE, loaded.current))
+      .then((g) => {
+        if (generation.current !== mine) return;
+        loaded.current = g.rows.filter((r) => !r.isWip).length;
+        setGraph(g);
+        setError(null);
+      })
+      .catch((e) => generation.current === mine && setError(String(e)))
+      .finally(() => {
+        if (generation.current === mine) loading.current = false;
+      });
+  }, [path, refreshKey, focusTick]);
 
   // Edits made in another program change the uncommitted-changes row (only .git is watched).
   useEffect(() => {
@@ -209,12 +217,24 @@ export default function Graph({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
-  // Load the next page when the user nears the end.
+  // Load the next page when the user nears the end; it is appended, nothing is fetched twice.
   useEffect(() => {
-    if (graph?.hasMore && !loading.current && last >= rows.length - 50) {
-      setLimit((l) => l + PAGE);
-    }
-  }, [graph, last, rows.length]);
+    if (!graph?.hasMore || loading.current || last < rows.length - 50) return;
+    const mine = generation.current;
+    loading.current = true;
+    getGraph(path, loaded.current, PAGE)
+      .then((page) => {
+        if (generation.current !== mine) return;
+        loaded.current += page.rows.length;
+        setGraph((prev) =>
+          prev && { rows: [...prev.rows, ...page.rows], maxLanes: Math.max(prev.maxLanes, page.maxLanes), hasMore: page.hasMore },
+        );
+      })
+      .catch((e) => generation.current === mine && setError(String(e)))
+      .finally(() => {
+        if (generation.current === mine) loading.current = false;
+      });
+  }, [graph, last, rows.length, path]);
 
   // Commits on the checked-out branch can be dropped (the backend also checks the details: the commit
   // must be on the branch's own line, with no merge after it, and not a detached HEAD).

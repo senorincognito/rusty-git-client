@@ -29,7 +29,7 @@ fn local_branches(repo: &Repository) -> Result<Vec<BranchInfo>, String> {
         if let Ok(up) = branch.upstream() {
             info.upstream = up.name().ok().flatten().map(str::to_string);
             if let (Some(l), Some(u)) = (branch.get().target(), up.get().target()) {
-                if let Ok((ahead, behind)) = repo.graph_ahead_behind(l, u) {
+                if let Ok((ahead, behind)) = crate::graph::ahead_behind(repo, l, u) {
                     info.ahead = ahead;
                     info.behind = behind;
                 }

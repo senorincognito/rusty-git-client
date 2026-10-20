@@ -37,7 +37,7 @@ fn sync_status(repo: &Repository) -> Result<SyncStatus, String> {
         if let Ok(up) = local.upstream() {
             status.upstream = up.name().ok().flatten().map(str::to_string);
             if let (Some(l), Some(u)) = (head.target(), up.get().target()) {
-                let (ahead, behind) = repo.graph_ahead_behind(l, u).map_err(err)?;
+                let (ahead, behind) = crate::graph::ahead_behind(repo, l, u).map_err(err)?;
                 status.ahead = ahead;
                 status.behind = behind;
             }
@@ -248,7 +248,7 @@ fn divergence(path: &str) -> Result<Divergence, String> {
         .get()
         .target()
         .ok_or("The upstream branch has no commits")?;
-    let (ahead_total, behind_total) = repo.graph_ahead_behind(local, remote).map_err(err)?;
+    let (ahead_total, behind_total) = crate::graph::ahead_behind(&repo, local, remote).map_err(err)?;
     Ok(Divergence {
         ahead: side_commits(&repo, local, remote)?,
         behind: side_commits(&repo, remote, local)?,

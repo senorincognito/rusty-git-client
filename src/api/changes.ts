@@ -8,7 +8,38 @@ export interface FileChange {
   unstaged: ChangeKind | null;
 }
 
-export const getStatus = (path: string) => invoke<FileChange[]>("get_status", { path });
+// Several panels ask for the status at once on every refresh, and scanning a big working tree is slow. Requests
+// share scans: they start on the next tick (so a burst joins one), and one that arrives while a scan runs is
+// answered by a single follow-up scan, never by the running one, which may have started before the change it asks about.
+interface Pending {
+  waiters: { resolve: (c: FileChange[]) => void; reject: (e: unknown) => void }[];
+  running: boolean;
+}
+const pending = new Map<string, Pending>();
+
+function scan(path: string, entry: Pending) {
+  const batch = entry.waiters.splice(0);
+  entry.running = true;
+  invoke<FileChange[]>("get_status", { path })
+    .then(
+      (c) => batch.forEach((w) => w.resolve(c)),
+      (e) => batch.forEach((w) => w.reject(e)),
+    )
+    .finally(() => {
+      entry.running = false;
+      if (entry.waiters.length > 0) scan(path, entry);
+      else pending.delete(path);
+    });
+}
+
+export const getStatus = (path: string) =>
+  new Promise<FileChange[]>((resolve, reject) => {
+    let entry = pending.get(path);
+    if (!entry) pending.set(path, (entry = { waiters: [], running: false }));
+    const first = entry.waiters.length === 0 && !entry.running;
+    entry.waiters.push({ resolve, reject });
+    if (first) setTimeout(() => scan(path, entry));
+  });
 export const stagePaths = (path: string, paths: string[]) =>
   invoke<void>("stage_paths", { path, paths });
 export const unstagePaths = (path: string, paths: string[]) =>

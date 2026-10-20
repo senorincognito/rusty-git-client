@@ -5,6 +5,8 @@ pub mod rebase_onto;
 pub mod reset;
 
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
+use std::sync::{LazyLock, Mutex};
 
 use git2::{Oid, Repository, Sort};
 use serde::Serialize;
@@ -143,7 +145,71 @@ fn first_free(lanes: &mut Vec<Option<Lane>>) -> usize {
     }
 }
 
-fn build_graph(path: &str, limit: usize) -> Result<Graph, String> {
+/// (ahead, behind) of two commits. Both numbers depend only on the two ids (history is immutable), so results are
+/// kept: an unchanged branch list is then free to reload, and equal tips never walk anything. libgit2 walks down to
+/// the merge base, which for a stale branch can be most of the history.
+pub(crate) fn ahead_behind(repo: &Repository, local: Oid, upstream: Oid) -> Result<(usize, usize), git2::Error> {
+    type Counts = HashMap<(Oid, Oid), (usize, usize)>;
+    static KNOWN: LazyLock<Mutex<Counts>> = LazyLock::new(Default::default);
+    if local == upstream {
+        return Ok((0, 0));
+    }
+    if let Some(&found) = KNOWN.lock().unwrap_or_else(|e| e.into_inner()).get(&(local, upstream)) {
+        return Ok(found);
+    }
+    let counts = repo.graph_ahead_behind(local, upstream)?;
+    let mut known = KNOWN.lock().unwrap_or_else(|e| e.into_inner());
+    if known.len() > 10_000 {
+        known.clear();
+    }
+    known.insert((local, upstream), counts);
+    Ok(counts)
+}
+
+/// What decides the order and layout of the rows: the commits the walk starts from, and HEAD (for `on_head`).
+type GraphKey = (Vec<Oid>, Option<Oid>);
+
+/// The lane layout after the first `pos` commits of the walk, so the next page can continue from there.
+struct Layout {
+    lanes: Vec<Option<Lane>>,
+    next_color: usize,
+    /// Commits known to be HEAD or its ancestors (rows come children-first, so one pass is enough).
+    head_ancestry: HashSet<Oid>,
+    max_lanes: usize,
+    pos: usize,
+}
+
+impl Layout {
+    fn new(head: Option<Oid>) -> Self {
+        Layout { lanes: Vec::new(), next_color: 0, head_ancestry: head.into_iter().collect(), max_lanes: 0, pos: 0 }
+    }
+
+    fn new_color(&mut self) -> usize {
+        let c = self.next_color % COLOR_COUNT;
+        self.next_color += 1;
+        c
+    }
+}
+
+/// Per repository: the whole topological order and the layout at the end of the last page served. libgit2 can't
+/// yield a topological walk lazily (it reads all of history before the first commit), so the order is computed once
+/// and reused until the refs change; each page then only reads the commits it shows.
+struct Cached {
+    key: GraphKey,
+    order: Vec<Oid>,
+    layout: Layout,
+}
+
+static CACHE: LazyLock<Mutex<HashMap<PathBuf, Cached>>> = LazyLock::new(Default::default);
+
+fn cache() -> std::sync::MutexGuard<'static, HashMap<PathBuf, Cached>> {
+    CACHE.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// `limit` commits starting at row `skip` (the uncommitted-changes row, when there is one, comes on top of the
+/// first page and doesn't count). A page that continues the previous one resumes from the saved layout; any other
+/// request lays out from the top again.
+fn build_graph(path: &str, skip: usize, limit: usize) -> Result<Graph, String> {
     let mut repo = Repository::discover(path).map_err(|e| e.message().to_string())?;
     let (mut labels, mut tips) = collect_refs(&repo).map_err(|e| e.message().to_string())?;
 
@@ -165,68 +231,80 @@ fn build_graph(path: &str, limit: usize) -> Result<Graph, String> {
         });
     }
 
-    let mut walk = repo.revwalk().map_err(|e| e.message().to_string())?;
-    walk.set_sorting(Sort::TOPOLOGICAL | Sort::TIME).map_err(|e| e.message().to_string())?;
-    for tip in tips {
-        walk.push(tip).map_err(|e| e.message().to_string())?;
-    }
+    let head = repo.head().ok().and_then(|h| h.peel_to_commit().ok()).map(|c| c.id());
+    tips.sort();
+    tips.dedup();
+    let key: GraphKey = (tips, head);
+    let cache_key = repo.path().to_path_buf();
 
-    let mut lanes: Vec<Option<Lane>> = Vec::new();
-    let mut next_color = 0usize;
-    let mut new_color = || {
-        let c = next_color % COLOR_COUNT;
-        next_color += 1;
-        c
+    // Taken out of the map while in use, so the lock isn't held during the work.
+    let cached = cache().remove(&cache_key);
+    let (order, saved) = match cached {
+        Some(c) if c.key == key => (c.order, Some(c.layout)),
+        _ => {
+            let mut walk = repo.revwalk().map_err(|e| e.message().to_string())?;
+            walk.set_sorting(Sort::TOPOLOGICAL | Sort::TIME).map_err(|e| e.message().to_string())?;
+            for tip in &key.0 {
+                walk.push(*tip).map_err(|e| e.message().to_string())?;
+            }
+            let mut order = Vec::new();
+            for oid in walk {
+                let oid = oid.map_err(|e| e.message().to_string())?;
+                if !stash_internal.contains(&oid) {
+                    order.push(oid);
+                }
+            }
+            (order, None)
+        }
     };
 
-    // Rows come children-first, so one pass can tell which commits are ancestors of HEAD.
-    let mut head_ancestry: HashSet<Oid> = HashSet::new();
-    if let Some(head) = repo.head().ok().and_then(|h| h.peel_to_commit().ok()) {
-        head_ancestry.insert(head.id());
-    }
-
     let mut rows: Vec<GraphRow> = Vec::new();
-    let mut max_lanes = 0usize;
-    let mut has_more = false;
+    let mut layout = match saved {
+        Some(l) if skip > 0 && l.pos == skip => l,
+        _ => {
+            let mut layout = Layout::new(head);
+            // Uncommitted changes appear as a pseudo commit on top, joined by a dashed lane to the commit
+            // HEAD points at (so it lands in that commit's lane). Not on a branch without commits.
+            if let Some(head) = head {
+                let changed = crate::changes::status_of(&repo)?.len();
+                if changed > 0 {
+                    let color = layout.new_color();
+                    layout.lanes.push(Some(Lane { oid: head, color, dashed: true }));
+                    layout.max_lanes = 1;
+                    if skip == 0 {
+                        rows.push(GraphRow {
+                            id: WIP_ID.to_string(),
+                            short_id: String::new(),
+                            summary: format!(
+                                "{changed} file change{} in working directory",
+                                if changed == 1 { "" } else { "s" }
+                            ),
+                            author: String::new(),
+                            email: String::new(),
+                            time: 0,
+                            parents: vec![head.to_string()],
+                            on_head: false,
+                            is_stash: false,
+                            is_wip: true,
+                            refs: Vec::new(),
+                            col: 0,
+                            color,
+                            top: Vec::new(),
+                            through: Vec::new(),
+                            bottom: vec![Edge { col: 0, color, dashed: true }],
+                        });
+                    }
+                }
+            }
+            layout
+        }
+    };
 
-    // Uncommitted changes appear as a pseudo commit on top, joined by a dashed lane to the commit
-    // HEAD points at (so it lands in that commit's lane). Not on a branch without commits.
-    if let Some(head) = repo.head().ok().and_then(|h| h.peel_to_commit().ok()) {
-        let changed = crate::changes::status_of(&repo)?.len();
-        if changed > 0 {
-            let color = new_color();
-            lanes.push(Some(Lane { oid: head.id(), color, dashed: true }));
-            max_lanes = 1;
-            rows.push(GraphRow {
-                id: WIP_ID.to_string(),
-                short_id: String::new(),
-                summary: format!("{changed} file change{} in working directory", if changed == 1 { "" } else { "s" }),
-                author: String::new(),
-                email: String::new(),
-                time: 0,
-                parents: vec![head.id().to_string()],
-                on_head: false,
-                is_stash: false,
-                is_wip: true,
-                refs: Vec::new(),
-                col: 0,
-                color,
-                top: Vec::new(),
-                through: Vec::new(),
-                bottom: vec![Edge { col: 0, color, dashed: true }],
-            });
-        }
-    }
-
-    for oid in walk {
-        let oid = oid.map_err(|e| e.message().to_string())?;
-        if stash_internal.contains(&oid) {
-            continue;
-        }
-        if rows.len() >= limit {
-            has_more = true;
-            break;
-        }
+    let end = skip.saturating_add(limit).min(order.len());
+    while layout.pos < end {
+        let oid = order[layout.pos];
+        let shown = layout.pos >= skip;
+        layout.pos += 1;
         let commit = repo.find_commit(oid).map_err(|e| e.message().to_string())?;
         // A stash only continues along the commit it was made on.
         let parent_ids: Vec<Oid> = if stash_ids.contains(&oid) {
@@ -235,16 +313,18 @@ fn build_graph(path: &str, limit: usize) -> Result<Graph, String> {
             commit.parent_ids().collect()
         };
 
+        let lanes = &mut layout.lanes;
         let matches: Vec<usize> =
             lanes.iter().enumerate().filter(|(_, l)| l.is_some_and(|l| l.oid == oid)).map(|(i, _)| i).collect();
 
         let (col, color) = match matches.first() {
             Some(&i) => (i, lanes[i].unwrap().color),
             None => {
-                let i = first_free(&mut lanes);
-                (i, new_color())
+                let i = first_free(lanes);
+                (i, layout.new_color())
             }
         };
+        let lanes = &mut layout.lanes;
 
         let top: Vec<Edge> = matches
             .iter()
@@ -262,37 +342,42 @@ fn build_graph(path: &str, limit: usize) -> Result<Graph, String> {
 
         let mut bottom = Vec::new();
         for (n, pid) in parent_ids.iter().copied().enumerate() {
-            let existing = lanes.iter().position(|l| l.is_some_and(|l| l.oid == pid));
+            let existing = layout.lanes.iter().position(|l| l.is_some_and(|l| l.oid == pid));
             match (existing, n) {
                 // Parent already has a lane (another branch reaches it): join that lane.
-                (Some(j), _) => {
-                    bottom.push(Edge { col: j, color: lanes[j].unwrap().color, dashed: lanes[j].unwrap().dashed })
-                }
+                (Some(j), _) => bottom.push(Edge {
+                    col: j,
+                    color: layout.lanes[j].unwrap().color,
+                    dashed: layout.lanes[j].unwrap().dashed,
+                }),
                 // First parent continues in this node's lane.
                 (None, 0) => {
-                    lanes[col] = Some(Lane { oid: pid, color, dashed: false });
+                    layout.lanes[col] = Some(Lane { oid: pid, color, dashed: false });
                     bottom.push(Edge { col, color, dashed: false });
                 }
                 // Additional parents (merge) open a new lane.
                 (None, _) => {
-                    let slot = first_free(&mut lanes);
-                    let c = new_color();
-                    lanes[slot] = Some(Lane { oid: pid, color: c, dashed: false });
+                    let slot = first_free(&mut layout.lanes);
+                    let c = layout.new_color();
+                    layout.lanes[slot] = Some(Lane { oid: pid, color: c, dashed: false });
                     bottom.push(Edge { col: slot, color: c, dashed: false });
                 }
             }
         }
 
-        max_lanes = max_lanes.max(lanes.len()).max(col + 1);
-        while matches!(lanes.last(), Some(None)) {
-            lanes.pop();
+        layout.max_lanes = layout.max_lanes.max(layout.lanes.len()).max(col + 1);
+        while matches!(layout.lanes.last(), Some(None)) {
+            layout.lanes.pop();
         }
 
-        let on_head = head_ancestry.contains(&oid);
+        let on_head = layout.head_ancestry.contains(&oid);
         if on_head {
-            head_ancestry.extend(parent_ids.iter().copied());
+            layout.head_ancestry.extend(parent_ids.iter().copied());
         }
 
+        if !shown {
+            continue;
+        }
         let author = commit.author();
         rows.push(GraphRow {
             id: oid.to_string(),
@@ -314,14 +399,16 @@ fn build_graph(path: &str, limit: usize) -> Result<Graph, String> {
         });
     }
 
-    Ok(Graph { rows, max_lanes, has_more })
+    let graph = Graph { rows, max_lanes: layout.max_lanes, has_more: end < order.len() };
+    cache().insert(cache_key, Cached { key, order, layout });
+    Ok(graph)
 }
 
-/// Commit graph over all branches, remotes and tags, newest first, with lane layout.
+/// Commit graph over all branches, remotes and tags, newest first, with lane layout, `limit` commits from row `skip`.
 /// Async so the (blocking) walk runs off the main thread.
 #[tauri::command]
-pub async fn get_graph(path: String, limit: usize) -> Result<Graph, String> {
-    tauri::async_runtime::spawn_blocking(move || build_graph(&path, limit)).await.map_err(|e| e.to_string())?
+pub async fn get_graph(path: String, skip: usize, limit: usize) -> Result<Graph, String> {
+    tauri::async_runtime::spawn_blocking(move || build_graph(&path, skip, limit)).await.map_err(|e| e.to_string())?
 }
 
 #[cfg(test)]
@@ -359,7 +446,7 @@ mod tests {
         let m = commit(&repo, "m", &[a2, b1], Some("refs/heads/main"));
         repo.set_head("refs/heads/main").unwrap();
 
-        let g = build_graph(dir.to_str().unwrap(), 100).unwrap();
+        let g = build_graph(dir.to_str().unwrap(), 0, 100).unwrap();
         let ids: Vec<_> = g.rows.iter().map(|r| r.id.clone()).collect();
         assert_eq!(g.rows.len(), 4);
         assert_eq!(ids[0], m.to_string());
@@ -382,7 +469,7 @@ mod tests {
         assert!(g.rows.iter().any(|r| r.refs.iter().any(|l| l.name == "topic")));
 
         // Limit truncates and reports more history.
-        let g = build_graph(dir.to_str().unwrap(), 2).unwrap();
+        let g = build_graph(dir.to_str().unwrap(), 0, 2).unwrap();
         assert_eq!(g.rows.len(), 2);
         assert!(g.has_more);
 
@@ -401,7 +488,7 @@ mod tests {
         let s = commit(&repo, "s", &[a], Some("refs/heads/side"));
         repo.set_head("refs/heads/main").unwrap();
 
-        let g = build_graph(dir.to_str().unwrap(), 100).unwrap();
+        let g = build_graph(dir.to_str().unwrap(), 0, 100).unwrap();
         let on_head = |id: Oid| g.rows.iter().find(|r| r.id == id.to_string()).unwrap().on_head;
         assert!(on_head(b) && on_head(a));
         assert!(!on_head(s));
@@ -425,7 +512,7 @@ mod tests {
         std::fs::write(dir.join("u.txt"), "untracked").unwrap();
         let stash = crate::sidebar::stash::save_stash(&mut repo, Some("wip")).unwrap();
 
-        let g = build_graph(dir.to_str().unwrap(), 100).unwrap();
+        let g = build_graph(dir.to_str().unwrap(), 0, 100).unwrap();
         // Two commits plus one stash: the saved-index and untracked-files commits stay hidden.
         assert_eq!(g.rows.len(), 3, "{:?}", g.rows.iter().map(|r| &r.summary).collect::<Vec<_>>());
         let row = g.rows.iter().find(|r| r.id == stash.to_string()).unwrap();
@@ -448,7 +535,7 @@ mod tests {
 
         // No commits yet: nothing to attach the pseudo commit to.
         std::fs::write(dir.join("early.txt"), "x").unwrap();
-        assert!(build_graph(dir.to_str().unwrap(), 100).unwrap().rows.is_empty());
+        assert!(build_graph(dir.to_str().unwrap(), 0, 100).unwrap().rows.is_empty());
         std::fs::remove_file(dir.join("early.txt")).unwrap();
 
         let a = commit(&repo, "a", &[], Some("refs/heads/main"));
@@ -456,13 +543,13 @@ mod tests {
         repo.set_head("refs/heads/main").unwrap();
 
         // A clean working directory has no pseudo commit.
-        let g = build_graph(dir.to_str().unwrap(), 100).unwrap();
+        let g = build_graph(dir.to_str().unwrap(), 0, 100).unwrap();
         assert_eq!(g.rows.len(), 2);
         assert!(g.rows.iter().all(|r| !r.is_wip));
 
         // One changed file: a row on top, joined by a dashed lane to HEAD's commit.
         std::fs::write(dir.join("one.txt"), "1").unwrap();
-        let g = build_graph(dir.to_str().unwrap(), 100).unwrap();
+        let g = build_graph(dir.to_str().unwrap(), 0, 100).unwrap();
         assert_eq!(g.rows.len(), 3);
         let wip = &g.rows[0];
         assert!(wip.is_wip && !wip.is_stash && !wip.on_head);
@@ -478,9 +565,83 @@ mod tests {
 
         // More files: the count follows, and the real rows are unaffected.
         std::fs::write(dir.join("two.txt"), "2").unwrap();
-        let g = build_graph(dir.to_str().unwrap(), 100).unwrap();
+        let g = build_graph(dir.to_str().unwrap(), 0, 100).unwrap();
         assert_eq!(g.rows[0].summary, "2 file changes in working directory");
         assert_eq!(g.rows.iter().filter(|r| r.is_wip).count(), 1);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn pages_continue_where_the_last_one_ended() {
+        let dir = std::env::temp_dir().join(format!("gc-pages-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let repo = Repository::init(&dir).unwrap();
+
+        // A history with branches and merges, plus uncommitted changes (a lane seeded before the first commit).
+        let mut main = commit(&repo, "c0", &[], Some("refs/heads/main"));
+        let mut last_side = main;
+        for i in 1..12 {
+            let side = commit(&repo, &format!("s{i}"), &[main], None);
+            last_side = side;
+            main = commit(&repo, &format!("m{i}"), &[main], Some("refs/heads/main"));
+            if i % 3 == 0 {
+                main = commit(&repo, &format!("merge{i}"), &[main, side], Some("refs/heads/main"));
+            }
+        }
+        repo.reference("refs/heads/side", last_side, true, "").unwrap();
+        repo.set_head("refs/heads/main").unwrap();
+        std::fs::write(dir.join("dirty.txt"), "x").unwrap();
+        let p = dir.to_str().unwrap();
+
+        let json = |rows: &[GraphRow]| serde_json::to_string(rows).unwrap();
+        let full = build_graph(p, 0, 1000).unwrap();
+        assert!(!full.has_more);
+
+        // Sequential pages (resumed from the cached layout) equal one big request.
+        let mut rows = Vec::new();
+        let mut skip = 0;
+        loop {
+            let page = build_graph(p, skip, 5).unwrap();
+            skip += page.rows.iter().filter(|r| !r.is_wip).count();
+            rows.extend(page.rows);
+            if !page.has_more {
+                assert_eq!(page.max_lanes, full.max_lanes);
+                break;
+            }
+        }
+        assert_eq!(json(&rows), json(&full.rows));
+
+        // A page that does not continue the previous one is laid out from the top and still matches.
+        build_graph(p, 0, 5).unwrap();
+        let jump = build_graph(p, 12, 4).unwrap();
+        assert_eq!(json(&jump.rows), json(&full.rows[13..17]));
+        assert!(jump.has_more);
+
+        // A moved ref invalidates the cached order.
+        let tip = commit(&repo, "new", &[main], Some("refs/heads/main"));
+        let after = build_graph(p, 0, 1000).unwrap();
+        assert_eq!(after.rows.len(), full.rows.len() + 1);
+        assert_eq!(after.rows[1].id, tip.to_string());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn ahead_behind_counts_and_repeats_from_the_cache() {
+        let dir = std::env::temp_dir().join(format!("gc-ahead-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let repo = Repository::init(&dir).unwrap();
+        let base = commit(&repo, "base", &[], Some("refs/heads/main"));
+        let a1 = commit(&repo, "a1", &[base], Some("refs/heads/main"));
+        let a2 = commit(&repo, "a2", &[a1], Some("refs/heads/main"));
+        let b1 = commit(&repo, "b1", &[base], None);
+
+        assert_eq!(ahead_behind(&repo, a2, a2).unwrap(), (0, 0));
+        for _ in 0..2 {
+            assert_eq!(ahead_behind(&repo, a2, b1).unwrap(), (2, 1));
+            assert_eq!(ahead_behind(&repo, b1, a2).unwrap(), (1, 2));
+        }
 
         let _ = std::fs::remove_dir_all(&dir);
     }

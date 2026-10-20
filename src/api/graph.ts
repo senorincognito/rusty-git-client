@@ -42,5 +42,6 @@ export interface Graph {
   hasMore: boolean;
 }
 
-export const getGraph = (path: string, limit: number) =>
-  invoke<Graph>("get_graph", { path, limit });
+/** `limit` commits from row `skip` (the uncommitted-changes row comes on top of the first page and does not count). */
+export const getGraph = (path: string, skip: number, limit: number) =>
+  invoke<Graph>("get_graph", { path, skip, limit });
