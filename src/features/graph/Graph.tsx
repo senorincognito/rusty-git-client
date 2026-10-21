@@ -95,6 +95,7 @@ export default function Graph({
   onCheckout,
   onMerge,
   onRebaseOnto,
+  onDeleteBranch,
   hasChanges,
   detached,
 }: {
@@ -129,6 +130,8 @@ export default function Graph({
   onMerge: (target: string, source: string) => void;
   /** Rebase the checked-out branch onto a branch (full ref name, display name). */
   onRebaseOnto: (target: string, source: string) => void;
+  /** Delete a local branch, or a remote one on the server (asks first). */
+  onDeleteBranch: (ref: RefLabel) => void;
   /** There are uncommitted changes, so a stash can't be applied cleanly. */
   hasChanges: boolean;
   /** HEAD is detached, so a cherry-pick or revert has no branch to land on. */
@@ -293,6 +296,25 @@ export default function Graph({
     ];
   };
 
+  // "Delete branch" for every branch label on the row: one item, or a group when there are several.
+  // The checked-out branch is disabled here; the backend also refuses the upstream of it.
+  const deleteItems = (row: GraphRow): MenuItem[] => {
+    const refs = row.refs.filter((r) => r.kind === "branch" || r.kind === "remote");
+    const leaf = (r: RefLabel, label: string): MenuItem => ({
+      label,
+      danger: true,
+      disabled: r.isHead,
+      title: r.isHead ? t.localBranches.deleteCurrent : r.kind === "remote" ? t.graph.deleteRemoteHint : t.graph.deleteLocalHint,
+      onClick: () => onDeleteBranch(r),
+    });
+    if (refs.length === 0) return [];
+    if (refs.length === 1) {
+      const [only] = refs;
+      return [leaf(only, only.kind === "remote" ? t.graph.deleteRemote(only.name) : t.graph.deleteLocal(only.name))];
+    }
+    return [{ label: t.graph.deleteGroup, danger: true, children: refs.map((r) => leaf(r, r.kind === "remote" ? t.graph.deleteRemoteEntry(r.name) : r.name)) }];
+  };
+
   // "Merge" / "Rebase onto" for the same branches (never the checked-out one): one item, or a group when there are several.
   const branchActionItems = (row: GraphRow): MenuItem[] => {
     const targets = checkoutTargets(row);
@@ -414,6 +436,7 @@ export default function Graph({
           y={menu.y}
           onClose={closeMenu}
           items={[
+            ...deleteItems(menu.row),
             ...copyNameItems(menu.row),
             ...checkoutItems(menu.row),
             ...branchActionItems(menu.row),

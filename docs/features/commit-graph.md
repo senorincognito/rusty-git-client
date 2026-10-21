@@ -29,7 +29,10 @@
   names the files; both need a checked-out branch; Undo takes them back) and **Copy commit SHA** (full id to the clipboard).
 - Right-click a commit that is the tip of another branch (local or remote): **Merge <branch> into the current branch** and **Rebase the current
   branch onto <branch>** (same confirmations and conflict handling as in the sidebar; a submenu when several branches sit on the commit).
-- Right-click a commit that carries a branch label (local or remote, the checked-out branch too): **Copy branch name** is the first item (a submenu when several
+- Right-click a commit that carries a branch label: **Delete branch `<name>`** (local) or **Delete remote branch `<name>`** (removed on the server) is the very first item
+  (a **Delete branch** submenu when several branches sit on the commit). It asks first, with the same warnings as in the left panel, and is greyed out for the
+  checked-out branch; a remote branch that is the checked-out branch's upstream is refused. A local delete can be undone, a remote one cannot.
+- Right-click a commit that carries a branch label (local or remote, the checked-out branch too): **Copy branch name** comes next (a submenu when several
   branches sit on the commit).
 - Right-click a branch in the sidebar (local or remote): **Copy branch name** puts the name (`feature/x`, `origin/feature/x`) on the clipboard.
 - Right-click a commit: **Rename commit** opens an editor in the right panel with the full

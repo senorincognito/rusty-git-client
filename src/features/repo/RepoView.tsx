@@ -3,7 +3,8 @@ import { listen } from "@tauri-apps/api/event";
 import type { ChangeKind } from "@/api/changes";
 import type { CommitFile, HistoryEntry } from "@/api/commit";
 import { confirmDialog, showError, showInfo } from "@/api/dialog";
-import { checkoutCommit, checkoutLocalBranch, checkoutRemoteBranch } from "@/api/branches";
+import { checkoutCommit, checkoutLocalBranch, checkoutRemoteBranch, countUnmergedCommits, deleteLocalBranch } from "@/api/branches";
+import { countUnmergedRemoteCommits, deleteRemoteBranch } from "@/api/remotes";
 import type { RefLabel } from "@/api/graph";
 import { applyStash, dropStash, popStash } from "@/api/stash";
 import { cherryPick, dropLatestCommit, fastForward, getDropInfo, getRebaseOntoInfo, getResetInfo, mergeBranch, rebaseOnto, resetToCommit, revertCommit, type ResetMode } from "@/api/history";
@@ -170,6 +171,30 @@ export default function RepoView({
       if (!(await confirmDialog(text, title, false, title))) return;
       await (kind === "pick" ? cherryPick : revertCommit)(path, commit.id);
       setOpenWorkingFile(null);
+      reload();
+    } catch (e) {
+      await showError(String(e), title);
+    }
+  };
+
+  // Right-click > Delete branch on a graph label: same confirmations as the sidebar lists (the backend refuses
+  // the checked-out branch and the upstream of it).
+  const deleteBranchRef = async (ref: RefLabel) => {
+    const title = ref.kind === "remote" ? t.remotes.deleteBranch : t.localBranches.deleteTitle;
+    try {
+      if (ref.kind === "remote") {
+        const slash = ref.name.indexOf("/");
+        const remote = ref.name.slice(0, slash);
+        const name = ref.name.slice(slash + 1);
+        const unique = await countUnmergedRemoteCommits(path, remote, name);
+        if (!(await confirmDialog(t.remotes.deleteBranchConfirm(ref.name, unique), title, true))) return;
+        await deleteRemoteBranch(path, remote, name);
+      } else {
+        const unmerged = await countUnmergedCommits(path, ref.name);
+        const message = unmerged > 0 ? t.localBranches.deleteUnmerged(ref.name, unmerged) : t.localBranches.deleteConfirm(ref.name);
+        if (!(await confirmDialog(message, title, unmerged > 0))) return;
+        await deleteLocalBranch(path, ref.name);
+      }
       reload();
     } catch (e) {
       await showError(String(e), title);
@@ -363,6 +388,7 @@ export default function RepoView({
                   onCheckout={checkoutRef}
                   onMerge={mergeInto}
                   onRebaseOnto={rebaseOntoBranch}
+                  onDeleteBranch={deleteBranchRef}
                   hasChanges={changeCount > 0}
                 />
               </div>
