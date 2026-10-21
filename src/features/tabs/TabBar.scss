@@ -1,0 +1,82 @@
+@use "@/styles/core" as *;
+
+.tabbar {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 6px 8px 0;
+  background: $bg;
+  border-bottom: 1px solid $border;
+  overflow-x: auto;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 220px;
+  padding: 6px 6px 6px 12px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: $radius $radius 0 0;
+  color: $muted;
+  cursor: pointer;
+  user-select: none;
+
+  &:hover {
+    background: $hover-tint;
+    color: $text;
+  }
+
+  &.active {
+    background: $panel;
+    border-color: $border;
+    color: $text;
+    margin-bottom: -1px; // sits over the bar's bottom border, so it joins the title bar below
+    box-shadow: inset 0 2px 0 $accent;
+  }
+}
+
+.tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-close,
+.tab-new {
+  border: none;
+  background: transparent;
+  color: $muted;
+  cursor: pointer;
+  border-radius: $radius-sm;
+  line-height: 1;
+
+  &:hover {
+    background: $press-tint;
+    color: $text;
+  }
+}
+
+.tab-close {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  font-size: 15px;
+}
+
+.tab-new {
+  flex: none;
+  align-self: center;
+  width: 26px;
+  height: 26px;
+  margin-bottom: 4px;
+  font-size: 18px;
+
+  &.active {
+    background: $accent-tint;
+    color: $text;
+  }
+}

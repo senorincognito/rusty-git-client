@@ -88,6 +88,8 @@ styles/                    global SCSS: tokens, mixins, base, buttons, switch, f
 *.scss next to components  each component's own styles, imported by that component
 ```
 
+**Tabs** (`features/tabs/TabBar`, state in `App`): `tabs: RepoInfo[]` plus `active` (a path, or null = start screen, which is also what "+" shows; no tab bar while there are no tabs). Only the active tab's `RepoView` is mounted (`key` = path): that is what keeps background tabs from auto-fetching, and it also keeps their watcher and the window-level key handlers (Esc, Ctrl+Z, arrows...) from firing in several repositories at once. The price is that a tab's UI state (open diff, selection, terminal session) is gone when you switch away. Opening an already open repository just activates its tab. `RepoView`'s `onRepoChange` must stay a stable callback (its watcher effect depends on it); it replaces the tab's `RepoInfo` (branch label). Open tabs are not persisted across restarts. The old "← Repositories" button is gone: the "+" tab replaces it.
+
 `RepoView` owns the screen state: `graphKey`, `terminalOpen`, `selectedCommit`, `openFile` (a commit's file),
 `openWorkingFile` (a staged/unstaged file from the Changes panel), `renaming`.
 
@@ -472,7 +474,7 @@ Release), and a Windows code-signing certificate to avoid the SmartScreen "unkno
 - macOS builds can only be made on a Mac.
 - **The app shells out to the system `git`**, so users need Git installed and on PATH; the installers cannot
   bundle it. The app reports "git executable not found" when it is missing.
-- Still the Tauri placeholder icons in `src-tauri/icons/` (replace via `npx tauri icon <logo.png>`).
+- The app icon (a red long branch and a blue short branch on a dark tile) was drawn with GDI+ in PowerShell (no Python/ImageMagick here); `src-tauri/icons/icon-source.png` (1024 px) is the source, regenerate the set with `npx tauri icon src-tauri/icons/icon-source.png`. That also creates `android/`, `ios/` and `64x64.png`, which are not used (desktop only): delete them again.
 - The version lives in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json`; keep them in sync.
 - The bundle identifier `com.gitclient.app` stays (it keys the saved data), see "Persisted state". `tauri build`
   warns that an identifier ending in `.app` is "not recommended" because it clashes with the macOS bundle

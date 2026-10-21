@@ -4,7 +4,8 @@
 .shell {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  flex: 1; // fills what is left of .app below the tab bar
+  min-height: 0;
 }
 
 .titlebar {

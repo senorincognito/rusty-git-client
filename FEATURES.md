@@ -5,6 +5,7 @@ The details live in one file per area under [docs/features/](docs/features/).
 
 ## Areas
 - [Repositories and start screen](docs/features/repositories.md): Opening repositories, the recent list and the folder of repositories on the start screen.
+- [Repository tabs](docs/features/tabs.md): Several repositories open at once, switched and closed like browser tabs; background tabs do not auto-fetch.
 - [Commit graph](docs/features/commit-graph.md): The lane graph, its highlighting, the working-directory row and the right-click menu of a commit.
 - [Creating commits](docs/features/commits.md): The Changes panel, committing and amending, and the right-click menu of a changed file.
 - [Commit details, diffs and file history](docs/features/commit-details.md): A commit's files, the diff views, hunk and line staging, and the history of one file.

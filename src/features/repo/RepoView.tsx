@@ -34,11 +34,9 @@ const TerminalPanel = lazy(() => import("@/features/terminal/TerminalPanel"));
 export default function RepoView({
   repo,
   onRepoChange,
-  onClose,
 }: {
   repo: RepoInfo;
   onRepoChange: (repo: RepoInfo) => void;
-  onClose: () => void;
 }) {
   const [graphKey, setGraphKey] = useState(0);
   const [terminalOpen, setTerminalOpen] = useState(false);
@@ -291,9 +289,6 @@ export default function RepoView({
   return (
     <div className="shell">
       <header className="titlebar">
-        <button className="ghost" onClick={onClose}>
-          {t.repo.back}
-        </button>
         <strong>{repo.name}</strong>
         <span className="branch">
           {repo.detached ? t.repo.detached : ""}

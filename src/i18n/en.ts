@@ -536,8 +536,13 @@ export const en = {
     resetHardHint: "Move the branch here and reset the staging area and your files; uncommitted changes are lost (asks first)",
   },
 
+  tabs: {
+    close: "Close tab",
+    closeTab: (name: string) => `Close ${name}`,
+    newTab: "Open another repository",
+  },
+
   repo: {
-    back: "← Repositories",
     detached: "detached @ ",
     noCommits: "(no commits yet)",
     stash: "Stash",

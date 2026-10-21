@@ -28,6 +28,13 @@ body {
   margin: 0;
 }
 
+// Tab bar on top, the start screen or repository screen filling the rest.
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
 // ---- Scrollbars: thin, rounded and quiet, in the theme's muted colour ----
 // The thumb is padded by a transparent border (so it is 6px wide inside a 10px track) and brightens on hover.
 $scroll-thumb: color-mix(in srgb, var(--muted) 35%, transparent);

@@ -3,7 +3,8 @@
 // Two panels side by side: recent repositories on the left, the folder's repositories on the right. Below 800px
 // wide they stack.
 .welcome {
-  height: 100vh; // like the repository screen (.shell)
+  flex: 1; // like the repository screen (.shell): what is left of .app below the tab bar
+  min-height: 0;
   display: flex;
   flex-direction: column;
   padding: 32px 40px;
