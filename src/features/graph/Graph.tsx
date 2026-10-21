@@ -276,6 +276,23 @@ export default function Graph({
     ];
   };
 
+  // "Copy branch name" for every branch label on the row (the checked-out one too): one item, or a group when there are several.
+  const copyNameItems = (row: GraphRow): MenuItem[] => {
+    const names = row.refs.filter((r) => r.kind === "branch" || r.kind === "remote");
+    const copy = (name: string) => navigator.clipboard?.writeText(name).catch(() => {});
+    if (names.length === 0) return [];
+    if (names.length === 1) {
+      return [{ label: t.common.copyBranchName, title: t.common.copyBranchNameHint, onClick: () => copy(names[0].name) }];
+    }
+    return [
+      {
+        label: t.common.copyBranchName,
+        title: t.common.copyBranchNameHint,
+        children: names.map((r) => ({ label: r.name, onClick: () => copy(r.name) })),
+      },
+    ];
+  };
+
   // "Merge" / "Rebase onto" for the same branches (never the checked-out one): one item, or a group when there are several.
   const branchActionItems = (row: GraphRow): MenuItem[] => {
     const targets = checkoutTargets(row);
@@ -397,6 +414,7 @@ export default function Graph({
           y={menu.y}
           onClose={closeMenu}
           items={[
+            ...copyNameItems(menu.row),
             ...checkoutItems(menu.row),
             ...branchActionItems(menu.row),
             {
