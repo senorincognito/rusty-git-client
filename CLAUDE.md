@@ -2,7 +2,7 @@
 
 Guidance for working on **Rusty Git Client**: a desktop Git GUI in the spirit of GitKraken, built with
 Tauri 2 (Rust backend, `git2`/libgit2 plus the system `git`) and React + TypeScript + Vite.
-Targets Windows and macOS. `FEATURES.md` lists the user-facing features (update it with every feature) and `README.md` covers requirements, running
+Targets Windows and macOS. `FEATURES.md` is the index of the user-facing features plus the shortcuts table, with the details in one file per area under `docs/features/` (update the matching file with every feature; add a file and an index line for a new area, split a file once it passes ~100 lines) and `README.md` covers requirements, running
 and building; this file is for contributors.
 
 **Keep this file current.** The author has given standing permission to update it without asking: when work
