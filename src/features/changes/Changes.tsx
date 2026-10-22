@@ -29,6 +29,8 @@ function FileList(props: {
   actionLabel: string;
   onAction: (paths: string[]) => void;
   onActionAll: () => void;
+  /** A trash button beside the "all" action, if the list offers one. */
+  onDiscardAll?: () => void;
   /** The file whose diff is open in the centre, if it is in this list. */
   selectedPath: string | null;
   onSelect: (file: { path: string; kind: ChangeKind }) => void;
@@ -39,7 +41,7 @@ function FileList(props: {
   /** The share of the panel's list height this list gets. */
   grow: number;
 }) {
-  const { title, files, actionLabel, onAction, onActionAll, selectedPath, onSelect, onContextMenu, menuPath, grow } =
+  const { title, files, actionLabel, onAction, onActionAll, onDiscardAll, selectedPath, onSelect, onContextMenu, menuPath, grow } =
     props;
   return (
     <section className="filelist" style={{ flexGrow: grow }}>
@@ -48,9 +50,23 @@ function FileList(props: {
           {title} <span className="count">{files.length}</span>
         </span>
         {files.length > 0 && (
-          <button className="ghost" onClick={onActionAll}>
-            {t.changes.actionAll(actionLabel)}
-          </button>
+          <span className="filelist-actions">
+            {onDiscardAll && (
+              <button
+                className="ghost discard-all"
+                title={t.changes.discardAllHint}
+                aria-label={t.changes.discardAll}
+                onClick={onDiscardAll}
+              >
+                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M2.5 4h11M6 4V2.5h4V4M4 4l.6 9h6.8L12 4M6.8 6.5v4.5M9.2 6.5v4.5" />
+                </svg>
+              </button>
+            )}
+            <button className="ghost" onClick={onActionAll}>
+              {t.changes.actionAll(actionLabel)}
+            </button>
+          </span>
         )}
       </header>
       <ul>
@@ -247,6 +263,26 @@ export default function Changes({
     });
   };
 
+  // The trash button of the Unstaged list: every unstaged file except conflicted ones (the backend refuses those).
+  const discardAll = async () => {
+    const files = unstaged.filter((f) => f.kind !== "conflicted");
+    const skipped = unstaged.length - files.length;
+    if (files.length === 0) return setError(t.changes.discardAllOnlyConflicts);
+    const text = t.changes.discardAllConfirm(
+      files.length,
+      files.filter((f) => f.kind === "new").length,
+      skipped,
+    );
+    if (!(await confirmDialog(text, t.changes.discardTitle, true, t.changes.discardAllOk))) return;
+    await run(async () => {
+      await discardPaths(
+        path,
+        files.map((f) => f.path),
+      );
+      onCommitted(); // reloads everything and closes a diff that is no longer true
+    });
+  };
+
   const stashFile = (file: { path: string }) =>
     run(async () => {
       await stashPaths(path, [file.path]);
@@ -316,6 +352,7 @@ export default function Changes({
         onContextMenu={(f, x, y) => setMenu({ x, y, path: f.path, kind: f.kind, staged: false })}
         actionLabel={t.changes.stage}
         onAction={(p) => run(() => stagePaths(path, p))}
+        onDiscardAll={discardAll}
         onActionAll={() =>
           run(() =>
             stagePaths(

@@ -394,6 +394,14 @@ export const en = {
     discardHint: "Throw away your unstaged changes to this file (asks first)",
     discardTitle: "Discard changes",
     discardOk: "Discard",
+    discardAll: "Discard all",
+    discardAllHint: "Throw away all unstaged changes, and delete untracked files (asks first)",
+    discardAllOk: "Discard all",
+    discardAllOnlyConflicts: "The remaining files have merge conflicts; resolve them first",
+    discardAllConfirm: (n: number, untracked: number, conflicted: number) =>
+      `Discard your unstaged changes to ${plural(n, "file")}? They are lost for good (git cannot recover them), though Undo brings them back until you close the app. Changes that are staged stay staged.` +
+      (untracked > 0 ? `\n\n${plural(untracked, "untracked file")} will be deleted: not in git, so only Undo can bring back.` : "") +
+      (conflicted > 0 ? `\n\n${plural(conflicted, "file")} with merge conflicts will be left alone.` : ""),
     restoreOk: "Restore",
     deleteUntrackedConfirm: (path: string) => `Delete the untracked file "${path}"? It is not in git, so it cannot be recovered.`,
     restoreConfirm: (path: string) => `Restore "${path}", which you deleted?`,

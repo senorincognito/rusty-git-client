@@ -16,6 +16,22 @@
     @include section-label;
   }
 
+  // "Stage all" with the trash button beside it.
+  .filelist-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .discard-all {
+    display: inline-flex;
+    align-items: center;
+
+    &:hover {
+      color: $danger;
+    }
+  }
+
   ul {
     flex: 1;
     margin: 0;
