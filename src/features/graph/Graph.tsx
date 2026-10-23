@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { useArrowKeys } from "@/hooks/useArrowKeys";
-import { getGraph, type Edge, type Graph as GraphData, type GraphRow, type RefLabel } from "@/api/graph";
+import { getGraph, type Edge, type Graph as GraphData, type GraphRow, type RefLabel, type SearchHit } from "@/api/graph";
 import type { ResetMode } from "@/api/history";
 import ContextMenu, { type MenuItem } from "@/components/ContextMenu";
 import { t } from "@/i18n";
+import SearchBar from "./SearchBar";
 import "./Graph.scss";
 
 const ROW_H = 28;
@@ -98,6 +99,9 @@ export default function Graph({
   onDeleteBranch,
   hasChanges,
   detached,
+  searchOpen,
+  searchFocus,
+  onCloseSearch,
 }: {
   path: string;
   refreshKey?: number;
@@ -136,6 +140,11 @@ export default function Graph({
   hasChanges: boolean;
   /** HEAD is detached, so a cherry-pick or revert has no branch to land on. */
   detached: boolean;
+  /** The find bar is shown above the graph. */
+  searchOpen: boolean;
+  /** Bumped when the search is asked for again: its field takes the focus. */
+  searchFocus: number;
+  onCloseSearch: () => void;
 }) {
   const [graph, setGraph] = useState<GraphData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -150,12 +159,17 @@ export default function Graph({
   const [focusTick, setFocusTick] = useState(0);
   const [menu, setMenu] = useState<{ x: number; y: number; row: GraphRow } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
+  // Commits matching the search (highlighted), and the hit to scroll to once its row is loaded.
+  const [matches, setMatches] = useState<ReadonlySet<string>>(new Set());
+  const [reveal, setReveal] = useState<SearchHit | null>(null);
+  const onHits = useCallback((hits: SearchHit[]) => setMatches(new Set(hits.map((h) => h.id))), []);
 
   // Reset when switching repositories.
   useEffect(() => {
     setGraph(null);
     loaded.current = 0;
     setMenu(null);
+    setReveal(null);
     scroller.current?.scrollTo({ top: 0 });
   }, [path]);
 
@@ -220,24 +234,52 @@ export default function Graph({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
-  // Load the next page when the user nears the end; it is appended, nothing is fetched twice.
+  // Appends `limit` more commits; nothing is fetched twice.
+  const loadMore = useCallback(
+    (limit: number) => {
+      const mine = generation.current;
+      loading.current = true;
+      getGraph(path, loaded.current, limit)
+        .then((page) => {
+          if (generation.current !== mine) return;
+          loaded.current += page.rows.length;
+          setGraph((prev) =>
+            prev && { rows: [...prev.rows, ...page.rows], maxLanes: Math.max(prev.maxLanes, page.maxLanes), hasMore: page.hasMore },
+          );
+        })
+        .catch((e) => generation.current === mine && setError(String(e)))
+        .finally(() => {
+          if (generation.current === mine) loading.current = false;
+        });
+    },
+    [path],
+  );
+
+  // Load the next page when the user nears the end.
   useEffect(() => {
     if (!graph?.hasMore || loading.current || last < rows.length - 50) return;
-    const mine = generation.current;
-    loading.current = true;
-    getGraph(path, loaded.current, PAGE)
-      .then((page) => {
-        if (generation.current !== mine) return;
-        loaded.current += page.rows.length;
-        setGraph((prev) =>
-          prev && { rows: [...prev.rows, ...page.rows], maxLanes: Math.max(prev.maxLanes, page.maxLanes), hasMore: page.hasMore },
-        );
-      })
-      .catch((e) => generation.current === mine && setError(String(e)))
-      .finally(() => {
-        if (generation.current === mine) loading.current = false;
-      });
-  }, [graph, last, rows.length, path]);
+    loadMore(PAGE);
+  }, [graph, last, rows.length, loadMore]);
+
+  // A search hit far down: load through its row (in one request), then centre it.
+  useEffect(() => {
+    const el = scroller.current;
+    if (!reveal || !el || !graph) return;
+    const index = rows.findIndex((r) => r.id === reveal.id);
+    if (index >= 0) {
+      setReveal(null);
+      el.scrollTop = Math.max(0, index * ROW_H - (el.clientHeight - ROW_H) / 2);
+    } else if (!graph.hasMore || reveal.index < loaded.current) {
+      setReveal(null); // the history changed since the search; its refresh brings new hits
+    } else if (!loading.current) {
+      loadMore(reveal.index + 1 - loaded.current + PAGE);
+    }
+  }, [reveal, graph, rows, loadMore]);
+
+  const goToHit = (hit: SearchHit) => {
+    onSelectCommit({ id: hit.id, shortId: hit.id.slice(0, 7) });
+    setReveal(hit);
+  };
 
   // Commits on the checked-out branch can be dropped (the backend also checks the details: the commit
   // must be on the branch's own line, with no merge after it, and not a detached HEAD).
@@ -347,182 +389,196 @@ export default function Graph({
   if (graph && rows.length === 0) return <p className="muted pad">{t.graph.noCommits}</p>;
 
   return (
-    <div className="graph" ref={scroller} onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}>
-      {!graph && (
-        <div className="graph-loading" role="status">
-          <span className="spinner" aria-hidden="true" />
-          <strong>{t.graph.loading}</strong>
-          <span className="muted">{t.graph.loadingHint}</span>
-        </div>
+    <>
+      {searchOpen && (
+        <SearchBar
+          path={path}
+          refreshKey={refreshKey}
+          selectedId={selectedId}
+          focusKey={searchFocus}
+          onHits={onHits}
+          onGo={goToHit}
+          onClose={onCloseSearch}
+        />
       )}
-      <div style={{ height: rows.length * ROW_H, position: "relative" }}>
-        {rows.slice(first, last).map((row, i) => (
-          <div
-            key={row.id}
-            className={
-              "row" +
-              (row.isWip ? " wip" : "") +
-              ((row.isWip ? selectedId === null : row.id === selectedId) ? " selected" : "") +
-              (row.id === menu?.row.id ? " ctx" : "") +
-              (isCurrent(row) ? " current" : "") +
-              // Commits that are not part of the checked-out branch's history fade back, so its history stands out.
-              (!row.onHead && !row.isWip && !row.isStash ? " off" : "")
-            }
-            style={{ top: (first + i) * ROW_H, height: ROW_H }}
-            onClick={() => (row.isWip ? onSelectWip() : onSelectCommit({ id: row.id, shortId: row.shortId }))}
-            onDoubleClick={() => {
-              const target = doubleClickTarget(row);
-              if (target) onCheckout(target);
-            }}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              if (row.isWip) return; // nothing to do with the uncommitted changes here
-              setMenu({ x: e.clientX, y: e.clientY, row });
-            }}
-          >
-            <RowGraph row={row} width={laneWidth} />
-            <div className="subject">
-              {row.refs.map((r) => (
-                <span key={r.kind + r.name} className={`ref ${r.kind}${r.isHead ? " head" : ""}`}>
-                  {r.name}
-                </span>
-              ))}
-              <span className="summary">{row.summary}</span>
-            </div>
-            <span className="author">{row.author}</span>
-            <span className="date">{row.isWip ? "" : dateFmt.format(new Date(row.time * 1000))}</span>
-            <span className="sha">{row.shortId}</span>
+      <div className="graph" ref={scroller} onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}>
+        {!graph && (
+          <div className="graph-loading" role="status">
+            <span className="spinner" aria-hidden="true" />
+            <strong>{t.graph.loading}</strong>
+            <span className="muted">{t.graph.loadingHint}</span>
           </div>
-        ))}
-      </div>
-      {menu && menu.row.isStash && (
-        <ContextMenu
-          x={menu.x}
-          y={menu.y}
-          onClose={closeMenu}
-          items={(() => {
-            const stash = {
-              id: menu.row.id,
-              label: menu.row.refs.find((r) => r.kind === "stash")?.name ?? menu.row.shortId,
-              message: menu.row.summary,
-            };
-            return [
+        )}
+        <div style={{ height: rows.length * ROW_H, position: "relative" }}>
+          {rows.slice(first, last).map((row, i) => (
+            <div
+              key={row.id}
+              className={
+                "row" +
+                (row.isWip ? " wip" : "") +
+                ((row.isWip ? selectedId === null : row.id === selectedId) ? " selected" : "") +
+                (row.id === menu?.row.id ? " ctx" : "") +
+                (searchOpen && matches.has(row.id) ? " match" : "") +
+                (isCurrent(row) ? " current" : "") +
+                // Commits that are not part of the checked-out branch's history fade back, so its history stands out.
+                (!row.onHead && !row.isWip && !row.isStash ? " off" : "")
+              }
+              style={{ top: (first + i) * ROW_H, height: ROW_H }}
+              onClick={() => (row.isWip ? onSelectWip() : onSelectCommit({ id: row.id, shortId: row.shortId }))}
+              onDoubleClick={() => {
+                const target = doubleClickTarget(row);
+                if (target) onCheckout(target);
+              }}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                if (row.isWip) return; // nothing to do with the uncommitted changes here
+                setMenu({ x: e.clientX, y: e.clientY, row });
+              }}
+            >
+              <RowGraph row={row} width={laneWidth} />
+              <div className="subject">
+                {row.refs.map((r) => (
+                  <span key={r.kind + r.name} className={`ref ${r.kind}${r.isHead ? " head" : ""}`}>
+                    {r.name}
+                  </span>
+                ))}
+                <span className="summary">{row.summary}</span>
+              </div>
+              <span className="author">{row.author}</span>
+              <span className="date">{row.isWip ? "" : dateFmt.format(new Date(row.time * 1000))}</span>
+              <span className="sha">{row.shortId}</span>
+            </div>
+          ))}
+        </div>
+        {menu && menu.row.isStash && (
+          <ContextMenu
+            x={menu.x}
+            y={menu.y}
+            onClose={closeMenu}
+            items={(() => {
+              const stash = {
+                id: menu.row.id,
+                label: menu.row.refs.find((r) => r.kind === "stash")?.name ?? menu.row.shortId,
+                message: menu.row.summary,
+              };
+              return [
+                {
+                  label: t.stashes.apply,
+                  disabled: hasChanges,
+                  title: hasChanges ? t.stashes.popNeedsClean : t.stashes.applyHint,
+                  onClick: () => onStashAction("apply", stash),
+                },
+                {
+                  label: t.stashes.pop,
+                  disabled: hasChanges,
+                  title: hasChanges ? t.stashes.popNeedsClean : t.stashes.popHint,
+                  onClick: () => onStashAction("pop", stash),
+                },
+                {
+                  label: t.stashes.delete,
+                  danger: true,
+                  separatorBefore: true,
+                  title: t.stashes.deleteHint,
+                  onClick: () => onStashAction("drop", stash),
+                },
+              ];
+            })()}
+          />
+        )}
+        {menu && !menu.row.isStash && (
+          <ContextMenu
+            x={menu.x}
+            y={menu.y}
+            onClose={closeMenu}
+            items={[
+              ...deleteItems(menu.row),
+              ...copyNameItems(menu.row),
+              ...checkoutItems(menu.row),
+              ...branchActionItems(menu.row),
               {
-                label: t.stashes.apply,
-                disabled: hasChanges,
-                title: hasChanges ? t.stashes.popNeedsClean : t.stashes.applyHint,
-                onClick: () => onStashAction("apply", stash),
+                label: t.graph.checkoutCommit,
+                disabled: isCurrent(menu.row),
+                title: t.graph.checkoutCommitHint,
+                onClick: () => onCheckoutCommit({ id: menu.row.id, shortId: menu.row.shortId }),
               },
               {
-                label: t.stashes.pop,
-                disabled: hasChanges,
-                title: hasChanges ? t.stashes.popNeedsClean : t.stashes.popHint,
-                onClick: () => onStashAction("pop", stash),
+                label: t.graph.cherryPick,
+                disabled: detached,
+                title: detached ? t.graph.cherryPickDetached : t.graph.cherryPickHint,
+                onClick: () => onCherryPick({ id: menu.row.id, shortId: menu.row.shortId }),
               },
               {
-                label: t.stashes.delete,
-                danger: true,
+                label: t.graph.revert,
+                disabled: detached,
+                title: detached ? t.graph.cherryPickDetached : t.graph.revertHint,
+                onClick: () => onRevert({ id: menu.row.id, shortId: menu.row.shortId }),
+              },
+              {
+                label: t.graph.copySha,
+                title: t.graph.copyShaHint,
+                onClick: () => {
+                  navigator.clipboard?.writeText(menu.row.id).catch(() => {});
+                },
+              },
+              {
+                label: t.graph.rename,
                 separatorBefore: true,
-                title: t.stashes.deleteHint,
-                onClick: () => onStashAction("drop", stash),
+                disabled: !menu.row.onHead,
+                title: menu.row.onHead
+                  ? undefined
+                  : menu.row.isStash
+                    ? t.graph.renameStash
+                    : t.graph.renameNotOnBranch,
+                onClick: () => onRenameCommit({ id: menu.row.id, shortId: menu.row.shortId }),
               },
-            ];
-          })()}
-        />
-      )}
-      {menu && !menu.row.isStash && (
-        <ContextMenu
-          x={menu.x}
-          y={menu.y}
-          onClose={closeMenu}
-          items={[
-            ...deleteItems(menu.row),
-            ...copyNameItems(menu.row),
-            ...checkoutItems(menu.row),
-            ...branchActionItems(menu.row),
-            {
-              label: t.graph.checkoutCommit,
-              disabled: isCurrent(menu.row),
-              title: t.graph.checkoutCommitHint,
-              onClick: () => onCheckoutCommit({ id: menu.row.id, shortId: menu.row.shortId }),
-            },
-            {
-              label: t.graph.cherryPick,
-              disabled: detached,
-              title: detached ? t.graph.cherryPickDetached : t.graph.cherryPickHint,
-              onClick: () => onCherryPick({ id: menu.row.id, shortId: menu.row.shortId }),
-            },
-            {
-              label: t.graph.revert,
-              disabled: detached,
-              title: detached ? t.graph.cherryPickDetached : t.graph.revertHint,
-              onClick: () => onRevert({ id: menu.row.id, shortId: menu.row.shortId }),
-            },
-            {
-              label: t.graph.copySha,
-              title: t.graph.copyShaHint,
-              onClick: () => {
-                navigator.clipboard?.writeText(menu.row.id).catch(() => {});
+              {
+                label: t.graph.rebase,
+                disabled: rebaseReason !== undefined,
+                title: rebaseReason ?? t.graph.rebaseHint,
+                onClick: () => onInteractiveRebase({ id: menu.row.id, shortId: menu.row.shortId }),
               },
-            },
-            {
-              label: t.graph.rename,
-              separatorBefore: true,
-              disabled: !menu.row.onHead,
-              title: menu.row.onHead
-                ? undefined
-                : menu.row.isStash
-                  ? t.graph.renameStash
-                  : t.graph.renameNotOnBranch,
-              onClick: () => onRenameCommit({ id: menu.row.id, shortId: menu.row.shortId }),
-            },
-            {
-              label: t.graph.rebase,
-              disabled: rebaseReason !== undefined,
-              title: rebaseReason ?? t.graph.rebaseHint,
-              onClick: () => onInteractiveRebase({ id: menu.row.id, shortId: menu.row.shortId }),
-            },
-            {
-              label: t.graph.drop,
-              danger: true,
-              disabled: dropReason !== undefined,
-              title: dropReason ?? t.graph.dropHint,
-              onClick: () => onDropCommit({ id: menu.row.id, shortId: menu.row.shortId }),
-            },
-            {
-              label: t.graph.fastForward,
-              separatorBefore: true,
-              disabled: menu.row.isStash || menu.row.onHead,
-              title: menu.row.isStash
-                ? t.graph.fastForwardStash
-                : menu.row.onHead
-                  ? t.graph.fastForwardContained
-                  : t.graph.fastForwardHint,
-              onClick: () => onFastForward({ id: menu.row.id, shortId: menu.row.shortId }),
-            },
-            // One group; the three reset modes open to its right.
-            {
-              label: t.graph.reset,
-              disabled: menu.row.isStash,
-              title: menu.row.isStash
-                ? t.graph.resetStash
-                : t.graph.resetHint,
-              children: (
-                [
-                  ["soft", t.graph.resetSoft, t.graph.resetSoftHint],
-                  ["mixed", t.graph.resetMixed, t.graph.resetMixedHint],
-                  ["hard", t.graph.resetHard, t.graph.resetHardHint],
-                ] as const
-              ).map(([mode, label, title]) => ({
-                label,
-                title,
-                danger: mode === "hard",
-                onClick: () => onResetCommit({ id: menu.row.id, shortId: menu.row.shortId }, mode),
-              })),
-            },
-          ]}
-        />
-      )}
-    </div>
+              {
+                label: t.graph.drop,
+                danger: true,
+                disabled: dropReason !== undefined,
+                title: dropReason ?? t.graph.dropHint,
+                onClick: () => onDropCommit({ id: menu.row.id, shortId: menu.row.shortId }),
+              },
+              {
+                label: t.graph.fastForward,
+                separatorBefore: true,
+                disabled: menu.row.isStash || menu.row.onHead,
+                title: menu.row.isStash
+                  ? t.graph.fastForwardStash
+                  : menu.row.onHead
+                    ? t.graph.fastForwardContained
+                    : t.graph.fastForwardHint,
+                onClick: () => onFastForward({ id: menu.row.id, shortId: menu.row.shortId }),
+              },
+              // One group; the three reset modes open to its right.
+              {
+                label: t.graph.reset,
+                disabled: menu.row.isStash,
+                title: menu.row.isStash
+                  ? t.graph.resetStash
+                  : t.graph.resetHint,
+                children: (
+                  [
+                    ["soft", t.graph.resetSoft, t.graph.resetSoftHint],
+                    ["mixed", t.graph.resetMixed, t.graph.resetMixedHint],
+                    ["hard", t.graph.resetHard, t.graph.resetHardHint],
+                  ] as const
+                ).map(([mode, label, title]) => ({
+                  label,
+                  title,
+                  danger: mode === "hard",
+                  onClick: () => onResetCommit({ id: menu.row.id, shortId: menu.row.shortId }, mode),
+                })),
+              },
+            ]}
+          />
+        )}
+      </div>
+    </>
   );
 }

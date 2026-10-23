@@ -43,6 +43,11 @@
     background: $hover-tint;
   }
 
+  // A commit matching the open search (after hover so it stays visible under the pointer, before selected).
+  &.match {
+    background: rgba(224, 166, 74, 0.16);
+  }
+
   // Selected must come after hover, and "menu open on this row" after both.
   &.selected {
     background: $accent-tint;

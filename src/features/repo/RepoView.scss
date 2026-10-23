@@ -32,8 +32,9 @@
   margin-left: 6px;
 }
 
-// Terminal toggle at the right end of the title bar (styled like the toolbar buttons).
-.termtoggle {
+// Terminal toggle and, at the very right end, the search toggle (styled like the toolbar buttons).
+.termtoggle,
+.searchbtn {
   margin-left: 6px;
 
   &.active {

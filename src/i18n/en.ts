@@ -544,6 +544,16 @@ export const en = {
     resetHardHint: "Move the branch here and reset the staging area and your files; uncommitted changes are lost (asks first)",
   },
 
+  search: {
+    placeholder: "Search commit messages or SHA",
+    noMatches: "No matches",
+    count: (at: number | null, total: number, truncated: boolean) =>
+      `${at === null ? "" : `${at} of `}${total}${truncated ? "+" : ""} ${total === 1 && !truncated ? "match" : "matches"}`,
+    previous: "Previous match (Shift+Enter)",
+    next: "Next match (Enter)",
+    close: "Close search (Esc)",
+  },
+
   tabs: {
     close: "Close tab",
     closeTab: (name: string) => `Close ${name}`,
@@ -557,6 +567,9 @@ export const en = {
     stashNothing: "No uncommitted changes to stash",
     terminal: ">_ Terminal",
     terminalHint: "Toggle terminal (Ctrl+`)",
+    search: "Search",
+    searchHint: (key: string) => `Search commit messages and SHAs (${key}+F)`,
+    searchRebasing: "Not available during an interactive rebase",
     dropTitle: "Drop commit",
     checkoutTitle: "Check out",
     stashTitle: "Stash",

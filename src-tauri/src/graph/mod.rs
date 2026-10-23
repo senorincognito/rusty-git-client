@@ -3,6 +3,7 @@ pub mod merge;
 pub mod pick;
 pub mod rebase_onto;
 pub mod reset;
+pub mod search;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -206,18 +207,24 @@ fn cache() -> std::sync::MutexGuard<'static, HashMap<PathBuf, Cached>> {
     CACHE.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-/// `limit` commits starting at row `skip` (the uncommitted-changes row, when there is one, comes on top of the
-/// first page and doesn't count). A page that continues the previous one resumes from the saved layout; any other
-/// request lays out from the top again.
-fn build_graph(path: &str, skip: usize, limit: usize) -> Result<Graph, String> {
-    let mut repo = Repository::discover(path).map_err(|e| e.message().to_string())?;
-    let (mut labels, mut tips) = collect_refs(&repo).map_err(|e| e.message().to_string())?;
+/// What a walk over the graph starts from: ref labels, stashes, HEAD, and the key that decides the order.
+struct Inputs {
+    labels: HashMap<Oid, Vec<RefLabel>>,
+    stash_ids: HashSet<Oid>,
+    /// The saved-index and untracked-files commits of stashes: never shown.
+    stash_internal: HashSet<Oid>,
+    head: Option<Oid>,
+    key: GraphKey,
+}
+
+fn inputs(repo: &mut Repository) -> Result<Inputs, String> {
+    let (mut labels, mut tips) = collect_refs(repo).map_err(|e| e.message().to_string())?;
 
     // Stashes show up as nodes hanging off the commit they were made on. Their second and third
     // parents (the saved index and the untracked files) are implementation details: not drawn.
     let mut stash_ids: HashSet<Oid> = HashSet::new();
     let mut stash_internal: HashSet<Oid> = HashSet::new();
-    for stash in crate::sidebar::stash::list_stashes(&mut repo)? {
+    for stash in crate::sidebar::stash::list_stashes(repo)? {
         let Ok(oid) = Oid::from_str(&stash.id) else { continue };
         if let Ok(commit) = repo.find_commit(oid) {
             stash_internal.extend(commit.parent_ids().skip(1));
@@ -234,30 +241,52 @@ fn build_graph(path: &str, skip: usize, limit: usize) -> Result<Graph, String> {
     let head = repo.head().ok().and_then(|h| h.peel_to_commit().ok()).map(|c| c.id());
     tips.sort();
     tips.dedup();
-    let key: GraphKey = (tips, head);
-    let cache_key = repo.path().to_path_buf();
+    Ok(Inputs { labels, stash_ids, stash_internal, head, key: (tips, head) })
+}
 
-    // Taken out of the map while in use, so the lock isn't held during the work.
-    let cached = cache().remove(&cache_key);
-    let (order, saved) = match cached {
-        Some(c) if c.key == key => (c.order, Some(c.layout)),
-        _ => {
-            let mut walk = repo.revwalk().map_err(|e| e.message().to_string())?;
-            walk.set_sorting(Sort::TOPOLOGICAL | Sort::TIME).map_err(|e| e.message().to_string())?;
-            for tip in &key.0 {
-                walk.push(*tip).map_err(|e| e.message().to_string())?;
-            }
-            let mut order = Vec::new();
-            for oid in walk {
-                let oid = oid.map_err(|e| e.message().to_string())?;
-                if !stash_internal.contains(&oid) {
-                    order.push(oid);
-                }
-            }
-            (order, None)
+/// The topological order of every commit shown, and the layout saved by the last page if the cached order still
+/// fits. The entry is taken out of the cache while in use (so the lock isn't held during the work): put it back.
+fn take_order(repo: &Repository, inputs: &Inputs) -> Result<(Vec<Oid>, Option<Layout>), String> {
+    let cached = cache().remove(repo.path());
+    if let Some(c) = cached.filter(|c| c.key == inputs.key) {
+        return Ok((c.order, Some(c.layout)));
+    }
+    let mut walk = repo.revwalk().map_err(|e| e.message().to_string())?;
+    walk.set_sorting(Sort::TOPOLOGICAL | Sort::TIME).map_err(|e| e.message().to_string())?;
+    for tip in &inputs.key.0 {
+        walk.push(*tip).map_err(|e| e.message().to_string())?;
+    }
+    let mut order = Vec::new();
+    for oid in walk {
+        let oid = oid.map_err(|e| e.message().to_string())?;
+        if !inputs.stash_internal.contains(&oid) {
+            order.push(oid);
         }
-    };
+    }
+    Ok((order, None))
+}
 
+/// `limit` commits starting at row `skip` (the uncommitted-changes row, when there is one, comes on top of the
+/// first page and doesn't count). A page that continues the previous one resumes from the saved layout; any other
+/// request lays out from the top again.
+fn build_graph(path: &str, skip: usize, limit: usize) -> Result<Graph, String> {
+    let mut repo = Repository::discover(path).map_err(|e| e.message().to_string())?;
+    let inputs = inputs(&mut repo)?;
+    let (order, saved) = take_order(&repo, &inputs)?;
+    build_rows(&repo, inputs, order, saved, skip, limit)
+}
+
+/// The rows of one page, laid out from `saved` when it ends where this page starts, else from the top.
+fn build_rows(
+    repo: &Repository,
+    inputs: Inputs,
+    order: Vec<Oid>,
+    saved: Option<Layout>,
+    skip: usize,
+    limit: usize,
+) -> Result<Graph, String> {
+    let Inputs { mut labels, stash_ids, head, key, .. } = inputs;
+    let cache_key = repo.path().to_path_buf();
     let mut rows: Vec<GraphRow> = Vec::new();
     let mut layout = match saved {
         Some(l) if skip > 0 && l.pos == skip => l,
@@ -266,7 +295,7 @@ fn build_graph(path: &str, skip: usize, limit: usize) -> Result<Graph, String> {
             // Uncommitted changes appear as a pseudo commit on top, joined by a dashed lane to the commit
             // HEAD points at (so it lands in that commit's lane). Not on a branch without commits.
             if let Some(head) = head {
-                let changed = crate::changes::status_of(&repo)?.len();
+                let changed = crate::changes::status_of(repo)?.len();
                 if changed > 0 {
                     let color = layout.new_color();
                     layout.lanes.push(Some(Lane { oid: head, color, dashed: true }));

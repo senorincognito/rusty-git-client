@@ -58,6 +58,7 @@ pub fn run() {
             changes::discard_paths,
             changes::create_commit,
             graph::get_graph,
+            graph::search::search_commits,
             history::drop::drop_latest_commit,
             history::drop::get_drop_info,
             history::rename::get_rename_info,

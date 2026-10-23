@@ -6,7 +6,7 @@ The details live in one file per area under [docs/features/](docs/features/).
 ## Areas
 - [Repositories and start screen](docs/features/repositories.md): Opening repositories, the recent list and the folder of repositories on the start screen.
 - [Repository tabs](docs/features/tabs.md): Several repositories open at once, switched and closed like browser tabs; background tabs do not auto-fetch.
-- [Commit graph](docs/features/commit-graph.md): The lane graph, its highlighting, the working-directory row and the right-click menu of a commit.
+- [Commit graph](docs/features/commit-graph.md): The lane graph, its highlighting, the working-directory row, searching commits and the right-click menu of a commit.
 - [Creating commits](docs/features/commits.md): The Changes panel, committing and amending, and the right-click menu of a changed file.
 - [Commit details, diffs and file history](docs/features/commit-details.md): A commit's files, the diff views, hunk and line staging, and the history of one file.
 - [Stashes](docs/features/stashes.md): Creating, applying, popping and deleting stashes.
@@ -22,6 +22,8 @@ The details live in one file per area under [docs/features/](docs/features/).
 | --- | --- |
 | `Esc` | Close the diff in the centre (same as **Back**); also closes menus and dialogs and cancels inline editors |
 | `Ctrl` + `` ` `` | Show or hide the terminal |
+| `Ctrl` + `F` (`Cmd` + `F` on macOS) | Search commit messages and SHAs (not inside the terminal) |
+| `Enter` / `Shift` + `Enter` in the search field | Select the next / previous match; `Esc` closes the search |
 | `Ctrl`/`Cmd` + `Enter` | Commit (staging panel) or Update (rename dialog) |
 | `Ctrl`/`Cmd` + `Z` / `Ctrl`/`Cmd` + `Shift` + `Z` (or `Ctrl` + `Y`) | Undo / Redo the last action (not inside text fields or the terminal) |
 | `Enter` / `Space` | Open the focused file row; `Enter` confirms an inline branch rename |

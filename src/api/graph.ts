@@ -45,3 +45,20 @@ export interface Graph {
 /** `limit` commits from row `skip` (the uncommitted-changes row comes on top of the first page and does not count). */
 export const getGraph = (path: string, skip: number, limit: number) =>
   invoke<Graph>("get_graph", { path, skip, limit });
+
+export interface SearchHit {
+  id: string;
+  /** Position among the graph's commit rows (the uncommitted-changes row not counted). */
+  index: number;
+}
+
+export interface SearchResult {
+  /** In graph order, newest first. */
+  hits: SearchHit[];
+  /** More commits matched than `hits` holds. */
+  truncated: boolean;
+}
+
+/** Commits whose message contains `query` (ignoring case) or whose id starts with it (4+ hex digits). */
+export const searchCommits = (path: string, query: string) =>
+  invoke<SearchResult>("search_commits", { path, query });

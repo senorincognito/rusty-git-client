@@ -30,6 +30,8 @@ import "./RepoView.scss";
 
 const TerminalPanel = lazy(() => import("@/features/terminal/TerminalPanel"));
 
+const isMac = /Mac/.test(navigator.userAgent);
+
 /** The screen for an open repository: title bar, sidebar, graph, changes and terminal. */
 export default function RepoView({
   repo,
@@ -66,6 +68,9 @@ export default function RepoView({
     from: { id: string; shortId: string } | null;
     entry: HistoryEntry | null;
   } | null>(null);
+  // The find bar above the graph; `searchFocus` is bumped by every request so an open bar takes the focus back.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchFocus, setSearchFocus] = useState(0);
   const path = repo.path;
   const changeCount = useWorkingChangeCount(path, graphKey);
 
@@ -76,6 +81,7 @@ export default function RepoView({
     closeCommit();
     setOpenWorkingFile(null);
     setHistory(null);
+    setSearchOpen(false);
     setRebasing(base);
   };
   const cancelRebase = useCallback(() => {
@@ -274,6 +280,31 @@ export default function RepoView({
     };
   }, [path, reload]);
 
+  // The search works on the graph, so whatever covers it (a diff, a file's history) is closed.
+  const openSearch = useCallback(() => {
+    if (rebasing) return;
+    setOpenFile(null);
+    setOpenWorkingFile(null);
+    setHistory(null);
+    setSearchOpen(true);
+    setSearchFocus((k) => k + 1);
+  }, [rebasing]);
+  const closeSearch = useCallback(() => setSearchOpen(false), []);
+
+  // Ctrl+F (Cmd+F on macOS) opens the search, also from text fields; the terminal keeps the key for the shell.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.isComposing || e.altKey || e.shiftKey || e.key.toLowerCase() !== "f") return;
+      if (!(isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey)) return;
+      if ((e.target as HTMLElement | null)?.closest?.(".xterm")) return;
+      if (document.querySelector(".ctxmenu, .modal-backdrop")) return;
+      e.preventDefault(); // also keeps the webview's own find bar away
+      openSearch();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [openSearch]);
+
   // Ctrl+` toggles the terminal.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -321,6 +352,14 @@ export default function RepoView({
           title={t.repo.terminalHint}
         >
           {t.repo.terminal}
+        </button>
+        <button
+          className={"syncbtn searchbtn" + (searchOpen ? " active" : "")}
+          disabled={rebasing !== null}
+          onClick={() => (searchOpen ? closeSearch() : openSearch())}
+          title={rebasing ? t.repo.searchRebasing : t.repo.searchHint(isMac ? "Cmd" : "Ctrl")}
+        >
+          {t.repo.search}
         </button>
       </header>
       <div className="body">
@@ -385,6 +424,9 @@ export default function RepoView({
                   onRebaseOnto={rebaseOntoBranch}
                   onDeleteBranch={deleteBranchRef}
                   hasChanges={changeCount > 0}
+                  searchOpen={searchOpen && !rebasing}
+                  searchFocus={searchFocus}
+                  onCloseSearch={closeSearch}
                 />
               </div>
               {history && !rebasing && (

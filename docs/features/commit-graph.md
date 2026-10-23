@@ -18,6 +18,17 @@
   to the window after editing files elsewhere.
 - Click a row to select it.
 
+## Search
+- **Search** at the right end of the title bar, or `Ctrl` + `F` (`Cmd` + `F` on macOS), opens a find bar above the graph. It searches the full
+  commit messages (subject and body, ignoring case) and commit ids: 4 or more hex digits also match the start of a SHA. All commits in the graph
+  are searched, not only the ones loaded so far.
+- Matching rows are highlighted, and the bar shows how many there are (and which one is selected). **Enter** / **▼** selects the next match,
+  **Shift** + **Enter** / **▲** the previous one, wrapping around; the graph loads far enough down and centres the commit, and its details open on
+  the right. At most 1000 matches are listed ("1000+").
+- The search follows the repository: new commits are searched as they appear. **Esc** or **✕** closes it. Opening it closes a diff or file history
+  that covers the graph; it is not available during an interactive rebase. The shortcut works from text fields too, but not in the terminal, where
+  `Ctrl` + `F` belongs to the shell.
+
 ## Commit graph context menu
 - A commit that is the tip of a branch, local or remote, has **Check out `<branch>`** at the top of its right-click menu (a **Check out** group listing the
   branches when several end at the same commit). **Double-clicking** the commit does the same: it switches to the local branch, or, when only remote branches
