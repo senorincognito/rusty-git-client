@@ -106,8 +106,8 @@ styles/                    global SCSS: tokens, mixins, base, buttons, switch, f
 
 `recent_repos.json` and `repo_folder.json` (the start screen's folder of repositories, a JSON string) in the app data dir; `localStorage` keys `sidebarWidth`, `changesWidth`,
 `autoFetch.enabled` (default true), `autoFetch.seconds` (default 180), `diff.mode` (`full` | `hunks` | `split`; falls back to the old `diff.fullFile` boolean when unset), `sectionHeight.<local|remotes|stashes>` (px), `changesSplit` (fraction).
-All of it is keyed by the bundle identifier `com.gitclient.app`, which is **deliberately unchanged** by the
-app rename so users keep their data. Don't change it casually.
+All of it is keyed by the bundle identifier `net.senorincognito.gitclient` (changed from `com.gitclient.app` in 0.2.x; the old
+app data dir and `localStorage` are not migrated, so saved settings and the recent-repos list reset once). Don't change it casually.
 
 ## Conventions
 
@@ -480,10 +480,8 @@ Release), and a Windows code-signing certificate to avoid the SmartScreen "unkno
   bundle it. The app reports "git executable not found" when it is missing.
 - The app icon (a red long branch and a blue short branch on a dark tile) was drawn with GDI+ in PowerShell (no Python/ImageMagick here); `src-tauri/icons/icon-source.png` (1024 px) is the source, regenerate the set with `npx tauri icon src-tauri/icons/icon-source.png`. That also creates `android/`, `ios/` and `64x64.png`, which are not used (desktop only): delete them again.
 - The version lives in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json`; keep them in sync.
-- The bundle identifier `com.gitclient.app` stays (it keys the saved data), see "Persisted state". `tauri build`
-  warns that an identifier ending in `.app` is "not recommended" because it clashes with the macOS bundle
-  extension. Harmless on Windows; if macOS builds are ever made, consider switching the identifier then (which
-  resets saved settings and the recent-repos list once).
+- The bundle identifier is `net.senorincognito.gitclient` (it keys the saved data), see "Persisted state". It replaced
+  `com.gitclient.app`, which no longer ends in `.app` (that clashed with the macOS bundle extension).
 
 ## Not implemented yet
 
