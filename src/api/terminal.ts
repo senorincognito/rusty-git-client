@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 
 export const termStart = (path: string, id: number, cols: number, rows: number) =>
   invoke<void>("term_start", { path, id, cols, rows });

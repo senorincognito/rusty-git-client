@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 
 export interface UndoState {
   /** What Undo would take back, e.g. "Merge feature"; null when there is nothing to undo. */

@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 
 export interface DiffLine {
   /** "hunk" is a hunk header (changes-only view); "note" is e.g. "No newline at end of file". */

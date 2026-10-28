@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 
 export interface StashEntry {
   /** Position in the list: 0 is the newest ("stash@{0}"). */

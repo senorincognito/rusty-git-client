@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { RefLabel } from "@/api/graph";
+import BusyBar from "@/components/BusyBar";
 import ResizablePanel from "@/components/ResizablePanel";
 import { t } from "@/i18n";
 import LocalBranches from "./LocalBranches";
@@ -92,6 +93,7 @@ export default function Sidebar({
           onAllDropped={onAllStashesDropped}
         />
       </nav>
+      <BusyBar path={path} panel="sidebar" />
       {switchingTo !== null && (
         <div className="sidebar-lock" role="status">
           <span className="spinner" aria-hidden="true" />

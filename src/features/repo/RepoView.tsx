@@ -11,6 +11,7 @@ import { cherryPick, dropLatestCommit, fastForward, getDropInfo, getRebaseOntoIn
 import { openRepo, type RepoInfo } from "@/api/repo";
 import { unwatchRepo, watchRepo } from "@/api/watch";
 import { useWorkingChangeCount } from "@/hooks/useWorkingChangeCount";
+import BusyBar from "@/components/BusyBar";
 import ResizablePanel from "@/components/ResizablePanel";
 import Changes from "@/features/changes/Changes";
 import CommitDetail from "@/features/commit/CommitDetail";
@@ -393,6 +394,7 @@ export default function RepoView({
               }}
             />
             <div className="center">
+              <BusyBar path={path} panel="graph" />
               {/* The graph stays mounted (just hidden) while a file is open, so its scroll position survives. */}
               <div className={"center-pane" + (openFile || openWorkingFile || history ? " hidden" : "")}>
                 <Graph
@@ -501,6 +503,7 @@ export default function RepoView({
           )}
         </div>
         <ResizablePanel edge="left" storageKey="changesWidth" defaultWidth={340} min={260}>
+          <BusyBar path={path} panel="right" />
           {renaming && (
             <RenameCommit
               path={path}

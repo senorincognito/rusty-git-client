@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 
 /** Answers a `credentials-request` event; `null` cancels (git then fails as it did without a prompt). */
 export const answerCredentials = (id: number, value: string | null) =>

@@ -12,6 +12,7 @@ export const en = {
     cancel: "Cancel",
     delete: "Delete",
     loading: "Loading…",
+    working: "Working…",
   },
 
   auth: {
