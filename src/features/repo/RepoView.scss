@@ -20,11 +20,22 @@
 
 // Current branch chip.
 .branch {
+  // Shrinks with the window and cuts the name off with an ellipsis; the tooltip has the full name.
+  flex: 0 1 auto;
+  min-width: 40px;
+  @include truncate;
   padding: 2px 8px;
+  border: none;
   border-radius: $radius-pill;
   background: $bg;
   color: $accent;
+  font: inherit;
   font-size: 12px;
+  cursor: pointer;
+
+  &:disabled {
+    cursor: default;
+  }
 }
 
 // Stash button between the sync buttons and the terminal toggle.

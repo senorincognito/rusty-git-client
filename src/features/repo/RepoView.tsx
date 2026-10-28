@@ -73,6 +73,9 @@ export default function RepoView({
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchFocus, setSearchFocus] = useState(0);
   const path = repo.path;
+  // The branch chip in the title bar copies the name on click; its tooltip confirms until the pointer leaves.
+  const [branchCopied, setBranchCopied] = useState(false);
+  const branchLabel = (repo.detached ? t.repo.detached : "") + (repo.head ?? t.repo.noCommits);
   const changeCount = useWorkingChangeCount(path, graphKey);
 
   // Right-click > Interactive rebase: its screen replaces the sidebar and the graph; the right panel
@@ -322,10 +325,18 @@ export default function RepoView({
     <div className="shell">
       <header className="titlebar">
         <strong>{repo.name}</strong>
-        <span className="branch">
-          {repo.detached ? t.repo.detached : ""}
-          {repo.head ?? t.repo.noCommits}
-        </span>
+        <button
+          className="branch"
+          title={branchCopied ? t.repo.branchCopied(branchLabel) : t.repo.branchHint(branchLabel)}
+          onClick={() => {
+            navigator.clipboard?.writeText(repo.head ?? "").catch(() => {});
+            setBranchCopied(true);
+          }}
+          onMouseLeave={() => setBranchCopied(false)}
+          disabled={!repo.head}
+        >
+          {branchLabel}
+        </button>
         <BranchButton path={path} onCreated={reload} />
         <UndoButtons
           path={path}

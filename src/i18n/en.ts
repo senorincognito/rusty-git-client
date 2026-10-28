@@ -564,6 +564,8 @@ export const en = {
   repo: {
     detached: "detached @ ",
     noCommits: "(no commits yet)",
+    branchHint: (name: string) => `${name}\nClick to copy`,
+    branchCopied: (name: string) => `${name}\nCopied to the clipboard`,
     stash: "Stash",
     stashNothing: "No uncommitted changes to stash",
     terminal: ">_ Terminal",
