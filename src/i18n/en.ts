@@ -81,6 +81,16 @@ export const en = {
     submit: "Stash",
   },
 
+  tagDialog: {
+    title: (shortId: string) => `Add tag to ${shortId}`,
+    namePlaceholder: "Tag name, e.g. v1.0",
+    nameLabel: "Tag name",
+    messagePlaceholder: "Message (optional)",
+    messageLabel: "Tag message",
+    hint: "Without a message the tag is a plain pointer; with one it is annotated and records you as the tagger. Tags stay local until pushed.",
+    submit: "Add tag",
+  },
+
   pullDialog: {
     title: "Branches have diverged",
     lead: "{branch} and {upstream} each have commits the other doesn't, so the pull can't simply fast-forward. Choose how to combine them.",
@@ -509,6 +519,11 @@ export const en = {
     cherryPickDetached: "Check out a branch first",
     revert: "Revert commit",
     revertHint: "Add a new commit on the checked-out branch that undoes this commit",
+    addTag: "Add tag…",
+    addTagHint: "Mark this commit with a tag",
+    deleteTag: (name: string) => `Delete tag ${name}`,
+    deleteTagGroup: "Delete tag",
+    deleteTagHint: "Delete this local tag (asks first)",
     copySha: "Copy commit SHA",
     copyShaHint: "Copy the full commit id to the clipboard",
     deleteLocal: (name: string) => `Delete branch ${name}`,
@@ -546,7 +561,7 @@ export const en = {
   },
 
   search: {
-    placeholder: "Search commit messages or SHA",
+    placeholder: "Search messages, tags or SHA",
     noMatches: "No matches",
     count: (at: number | null, total: number, truncated: boolean) =>
       `${at === null ? "" : `${at} of `}${total}${truncated ? "+" : ""} ${total === 1 && !truncated ? "match" : "matches"}`,
@@ -571,12 +586,15 @@ export const en = {
     terminal: ">_ Terminal",
     terminalHint: "Toggle terminal (Ctrl+`)",
     search: "Search",
-    searchHint: (key: string) => `Search commit messages and SHAs (${key}+F)`,
+    searchHint: (key: string) => `Search commit messages, tags and SHAs (${key}+F)`,
     searchRebasing: "Not available during an interactive rebase",
     dropTitle: "Drop commit",
     checkoutTitle: "Check out",
     stashTitle: "Stash",
     fastForwardTitle: "Fast-forward",
+    deleteTagTitle: "Delete tag",
+    deleteTagConfirm: (name: string) =>
+      `Delete the tag ${name}?\n\nThe commit stays. Only the local tag goes: a copy that was pushed to a server is not touched, and this can't be undone with Undo.`,
     cherryPickTitle: "Cherry pick",
     revertTitle: "Revert",
     cherryPickConfirm: (shortId: string) =>

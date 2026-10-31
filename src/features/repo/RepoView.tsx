@@ -5,7 +5,7 @@ import type { CommitFile, HistoryEntry } from "@/api/commit";
 import { confirmDialog, showError, showInfo } from "@/api/dialog";
 import { checkoutCommit, checkoutLocalBranch, checkoutRemoteBranch, countUnmergedCommits, deleteLocalBranch } from "@/api/branches";
 import { countUnmergedRemoteCommits, deleteRemoteBranch } from "@/api/remotes";
-import type { RefLabel } from "@/api/graph";
+import { deleteTag, type RefLabel } from "@/api/graph";
 import { applyStash, dropStash, popStash } from "@/api/stash";
 import { cherryPick, dropLatestCommit, fastForward, getDropInfo, getRebaseOntoInfo, getResetInfo, mergeBranch, rebaseOnto, resetToCommit, revertCommit, type ResetMode } from "@/api/history";
 import { openRepo, type RepoInfo } from "@/api/repo";
@@ -19,6 +19,7 @@ import StashDialog from "@/features/changes/StashDialog";
 import FileHistory from "@/features/commit/FileHistory";
 import FileDiff from "@/features/commit/FileDiff";
 import Graph from "@/features/graph/Graph";
+import TagDialog from "@/features/graph/TagDialog";
 import InteractiveRebase from "@/features/rebase/InteractiveRebase";
 import RenameCommit from "@/features/rename/RenameCommit";
 import Sidebar from "@/features/sidebar/Sidebar";
@@ -206,6 +207,18 @@ export default function RepoView({
       reload();
     } catch (e) {
       await showError(String(e), title);
+    }
+  };
+
+  // Right-click > Add tag… opens the dialog; Delete tag asks first. Tags are local and outside the undo journal.
+  const [tagging, setTagging] = useState<{ id: string; shortId: string } | null>(null);
+  const deleteTagByName = async (name: string) => {
+    try {
+      if (!(await confirmDialog(t.repo.deleteTagConfirm(name), t.repo.deleteTagTitle, true))) return;
+      await deleteTag(path, name);
+      reload();
+    } catch (e) {
+      await showError(String(e), t.repo.deleteTagTitle);
     }
   };
 
@@ -436,6 +449,8 @@ export default function RepoView({
                   onMerge={mergeInto}
                   onRebaseOnto={rebaseOntoBranch}
                   onDeleteBranch={deleteBranchRef}
+                  onAddTag={setTagging}
+                  onDeleteTag={deleteTagByName}
                   hasChanges={changeCount > 0}
                   searchOpen={searchOpen && !rebasing}
                   searchFocus={searchFocus}
@@ -582,6 +597,17 @@ export default function RepoView({
           onStashed={() => {
             setStashOpen(false);
             setOpenWorkingFile(null); // what was stashed no longer has a working diff
+            reload();
+          }}
+        />
+      )}
+      {tagging && (
+        <TagDialog
+          path={path}
+          commit={tagging}
+          onClose={() => setTagging(null)}
+          onTagged={() => {
+            setTagging(null);
             reload();
           }}
         />

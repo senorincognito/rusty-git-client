@@ -24,8 +24,8 @@ pub struct SearchResult {
     pub truncated: bool,
 }
 
-/// Commits shown in the graph whose message contains `query` (ignoring case), or whose id starts with it. In graph
-/// order, so stepping through the hits walks down the graph.
+/// Commits shown in the graph whose message or tag name contains `query` (ignoring case), or whose id starts with it.
+/// In graph order, so stepping through the hits walks down the graph.
 fn search(path: &str, query: &str) -> Result<SearchResult, String> {
     let needle = query.trim().to_lowercase();
     if needle.is_empty() {
@@ -42,7 +42,12 @@ fn search(path: &str, query: &str) -> Result<SearchResult, String> {
     let mut failed = None;
     for (index, &oid) in order.iter().enumerate() {
         let id = oid.to_string();
-        let matched = (sha && id.starts_with(&needle))
+        let tagged = inputs
+            .labels
+            .get(&oid)
+            .is_some_and(|ls| ls.iter().any(|l| l.kind == "tag" && l.name.to_lowercase().contains(&needle)));
+        let matched = tagged
+            || (sha && id.starts_with(&needle))
             || match repo.find_commit(oid) {
                 Ok(commit) => String::from_utf8_lossy(commit.message_bytes()).to_lowercase().contains(&needle),
                 Err(e) => {
@@ -107,6 +112,10 @@ mod tests {
         // Nothing to look for, nothing found.
         assert!(search(p, "   ").unwrap().hits.is_empty());
         assert!(search(p, "no such text").unwrap().hits.is_empty());
+
+        // A tag name finds the tagged commit, even when its message doesn't contain the text.
+        repo.tag_lightweight("Release-1.0", &repo.find_object(c, None).unwrap(), false).unwrap();
+        assert_eq!(ids(search(p, "release-1").unwrap()), [(c.to_string(), 0)]);
 
         // The order handed back to the cache still serves the graph.
         let g = super::super::build_graph(p, 0, 10).unwrap();

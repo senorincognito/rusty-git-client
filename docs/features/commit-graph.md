@@ -20,7 +20,7 @@
 
 ## Search
 - **Search** at the right end of the title bar, or `Ctrl` + `F` (`Cmd` + `F` on macOS), opens a find bar above the graph. It searches the full
-  commit messages (subject and body, ignoring case) and commit ids: 4 or more hex digits also match the start of a SHA. All commits in the graph
+  commit messages (subject and body, ignoring case), tag names (a part of the name is enough) and commit ids: 4 or more hex digits also match the start of a SHA. All commits in the graph
   are searched, not only the ones loaded so far.
 - Matching rows are highlighted, and the bar shows how many there are (and which one is selected). **Enter** / **▼** selects the next match,
   **Shift** + **Enter** / **▲** the previous one, wrapping around; the graph loads far enough down and centres the commit, and its details open on
@@ -40,6 +40,10 @@
   names the files; both need a checked-out branch; Undo takes them back) and **Copy commit SHA** (full id to the clipboard).
 - Right-click a commit that is the tip of another branch (local or remote): **Merge <branch> into the current branch** and **Rebase the current
   branch onto <branch>** (same confirmations and conflict handling as in the sidebar; a submenu when several branches sit on the commit).
+- **Tags**: tags are shown as yellow labels on their commit (there is no tags panel) and are found by the search. Right-click a commit > **Add tag…** asks for a name
+  and an optional message: without a message the tag is lightweight, with one it is annotated and records you as the tagger. An existing name is refused, not moved.
+  A commit that carries tags has **Delete tag `<name>`** (a **Delete tag** submenu when several), which asks first. Tags are local: nothing is pushed and a deleted
+  tag stays on any server it was pushed to. Add/delete tag are not in the Undo history.
 - Right-click a commit that carries a branch label: **Delete branch `<name>`** (local) or **Delete remote branch `<name>`** (removed on the server) is the very first item
   (a **Delete branch** submenu when several branches sit on the commit). It asks first, with the same warnings as in the left panel, and is greyed out for the
   checked-out branch; a remote branch that is the checked-out branch's upstream is refused. A local delete can be undone, a remote one cannot.

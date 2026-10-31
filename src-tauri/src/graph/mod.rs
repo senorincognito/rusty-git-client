@@ -4,6 +4,7 @@ pub mod pick;
 pub mod rebase_onto;
 pub mod reset;
 pub mod search;
+pub mod tags;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;

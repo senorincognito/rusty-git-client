@@ -97,6 +97,8 @@ export default function Graph({
   onMerge,
   onRebaseOnto,
   onDeleteBranch,
+  onAddTag,
+  onDeleteTag,
   hasChanges,
   detached,
   searchOpen,
@@ -136,6 +138,10 @@ export default function Graph({
   onRebaseOnto: (target: string, source: string) => void;
   /** Delete a local branch, or a remote one on the server (asks first). */
   onDeleteBranch: (ref: RefLabel) => void;
+  /** Tag this commit (opens the name dialog). */
+  onAddTag: (commit: { id: string; shortId: string }) => void;
+  /** Delete a local tag by name (asks first). */
+  onDeleteTag: (name: string) => void;
   /** There are uncommitted changes, so a stash can't be applied cleanly. */
   hasChanges: boolean;
   /** HEAD is detached, so a cherry-pick or revert has no branch to land on. */
@@ -357,6 +363,15 @@ export default function Graph({
     return [{ label: t.graph.deleteGroup, danger: true, children: refs.map((r) => leaf(r, r.kind === "remote" ? t.graph.deleteRemoteEntry(r.name) : r.name)) }];
   };
 
+  // "Delete tag" for every tag on the row: one item, or a group when there are several.
+  const deleteTagItems = (row: GraphRow): MenuItem[] => {
+    const tags = row.refs.filter((r) => r.kind === "tag");
+    const leaf = (r: RefLabel, label: string): MenuItem => ({ label, danger: true, title: t.graph.deleteTagHint, onClick: () => onDeleteTag(r.name) });
+    if (tags.length === 0) return [];
+    if (tags.length === 1) return [leaf(tags[0], t.graph.deleteTag(tags[0].name))];
+    return [{ label: t.graph.deleteTagGroup, danger: true, children: tags.map((r) => leaf(r, r.name)) }];
+  };
+
   // "Merge" / "Rebase onto" for the same branches (never the checked-out one): one item, or a group when there are several.
   const branchActionItems = (row: GraphRow): MenuItem[] => {
     const targets = checkoutTargets(row);
@@ -492,6 +507,7 @@ export default function Graph({
             onClose={closeMenu}
             items={[
               ...deleteItems(menu.row),
+              ...deleteTagItems(menu.row),
               ...copyNameItems(menu.row),
               ...checkoutItems(menu.row),
               ...branchActionItems(menu.row),
@@ -512,6 +528,11 @@ export default function Graph({
                 disabled: detached,
                 title: detached ? t.graph.cherryPickDetached : t.graph.revertHint,
                 onClick: () => onRevert({ id: menu.row.id, shortId: menu.row.shortId }),
+              },
+              {
+                label: t.graph.addTag,
+                title: t.graph.addTagHint,
+                onClick: () => onAddTag({ id: menu.row.id, shortId: menu.row.shortId }),
               },
               {
                 label: t.graph.copySha,

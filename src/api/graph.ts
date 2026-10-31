@@ -59,6 +59,13 @@ export interface SearchResult {
   truncated: boolean;
 }
 
-/** Commits whose message contains `query` (ignoring case) or whose id starts with it (4+ hex digits). */
+/** Commits whose message or tag name contains `query` (ignoring case) or whose id starts with it (4+ hex digits). */
 export const searchCommits = (path: string, query: string) =>
   invoke<SearchResult>("search_commits", { path, query });
+
+/** Tags a commit (hex id): lightweight, or annotated when `message` has text. Rejects when the name is taken or invalid. */
+export const createTag = (path: string, id: string, name: string, message: string | null) =>
+  invoke<void>("create_tag_cmd", { path, id, name, message });
+
+/** Deletes a local tag. A pushed copy on the server stays. */
+export const deleteTag = (path: string, name: string) => invoke<void>("delete_tag_cmd", { path, name });
