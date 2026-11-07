@@ -10,6 +10,7 @@ import {
   type FileChange,
   type HeadCommit,
 } from "@/api/changes";
+import { abortMerge, getMergeState, type MergeState } from "@/api/conflicts";
 import { confirmDialog } from "@/api/dialog";
 import { stashPaths } from "@/api/stash";
 import ContextMenu, { type MenuItem } from "@/components/ContextMenu";
@@ -135,6 +136,8 @@ export default function Changes({
   const [amend, setAmend] = useState(false);
   const [stashOpen, setStashOpen] = useState(false);
   const [head, setHead] = useState<HeadCommit | null>(null);
+  // A merge that stopped on conflicts (or is waiting for its commit).
+  const [merge, setMerge] = useState<MergeState | null>(null);
   // Right-click menu on a file row (which list it was opened in decides what it offers).
   const [menu, setMenu] = useState<{ x: number; y: number; path: string; kind: ChangeKind; staged: boolean } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
@@ -144,9 +147,10 @@ export default function Changes({
   const refresh = useCallback(async () => {
     const isCurrent = start();
     try {
-      const c = await getStatus(path);
+      const [c, m] = await Promise.all([getStatus(path), getMergeState(path)]);
       if (!isCurrent()) return;
       setChanges(c);
+      setMerge(m);
       setError(null);
     } catch (e) {
       if (isCurrent()) setError(String(e));
@@ -177,10 +181,16 @@ export default function Changes({
       .catch(() => isCurrent() && setHead(null));
   }, [path, refreshKey, startHead]);
 
+  // A merge that just stopped brings its message for the commit (the draft is kept if there is one).
+  const mergeMessage = merge?.message ?? null;
+  useEffect(() => {
+    if (mergeMessage) setMessage((m) => (m === "" ? mergeMessage : m));
+  }, [mergeMessage]);
+
   // The last commit disappeared (e.g. reset in a terminal): there is nothing left to amend.
   useEffect(() => {
-    if (amend && !head) setAmend(false);
-  }, [amend, head]);
+    if (amend && (!head || merge)) setAmend(false);
+  }, [amend, head, merge]);
 
   const toggleAmend = (on: boolean) => {
     if (on) {
@@ -264,6 +274,15 @@ export default function Changes({
   };
 
   // The trash button of the Unstaged list: every unstaged file except conflicted ones (the backend refuses those).
+  const abort = async () => {
+    if (!(await confirmDialog(t.conflicts.abortConfirm, t.conflicts.abort, true, t.conflicts.abortOk))) return;
+    await run(async () => {
+      await abortMerge(path);
+      if (merge && message === merge.message) setMessage("");
+      onCommitted(); // reloads everything and closes a view of a file that is no longer conflicted
+    });
+  };
+
   const discardAll = async () => {
     const files = unstaged.filter((f) => f.kind !== "conflicted");
     const skipped = unstaged.length - files.length;
@@ -337,11 +356,24 @@ export default function Changes({
       onCommitted();
     });
 
-  // An amend may change only the message, so it doesn't need staged files.
-  const canCommit = !busy && message.trim().length > 0 && (amend || staged.length > 0);
+  // An amend may change only the message, so it doesn't need staged files; a merge can be committed with nothing
+  // staged (every conflict resolved to the current version) but not while conflicts are left.
+  const mergeBlocked = merge !== null && merge.conflicts > 0;
+  const canCommit = !busy && message.trim().length > 0 && (amend || merge !== null || staged.length > 0) && !mergeBlocked;
 
   return (
     <aside className="changes" ref={root} style={hidden ? { display: "none" } : undefined}>
+      {merge && (
+        <div className={"merge-banner" + (merge.conflicts > 0 ? " conflicts" : "")} role="status">
+          <div>
+            <strong>{t.conflicts.mergeInProgress}</strong>
+            <span>{merge.conflicts > 0 ? t.conflicts.conflictsLeft(merge.conflicts) : t.conflicts.allResolved}</span>
+          </div>
+          <button className="ghost" disabled={busy} onClick={abort} title={t.conflicts.abortHint}>
+            {t.conflicts.abort}
+          </button>
+        </div>
+      )}
       <FileList
         title={t.changes.unstaged}
         grow={split}
@@ -353,11 +385,12 @@ export default function Changes({
         actionLabel={t.changes.stage}
         onAction={(p) => run(() => stagePaths(path, p))}
         onDiscardAll={discardAll}
+        // Staging a conflicted file would mark it resolved: those go through the conflict view.
         onActionAll={() =>
           run(() =>
             stagePaths(
               path,
-              unstaged.map((f) => f.path),
+              unstaged.filter((f) => f.kind !== "conflicted").map((f) => f.path),
             ),
           )
         }
@@ -391,18 +424,20 @@ export default function Changes({
       <div className="commitbox">
         <div className="commit-toolbar">
           <label
-            className={"switch" + (!head || busy ? " disabled" : "")}
+            className={"switch" + (!head || busy || merge ? " disabled" : "")}
             title={
-              head
-                ? t.changes.amendHint(head.shortId)
-                : t.changes.nothingToAmend
+              merge
+                ? t.conflicts.amendMerge
+                : head
+                  ? t.changes.amendHint(head.shortId)
+                  : t.changes.nothingToAmend
             }
           >
             <input
               type="checkbox"
               role="switch"
               checked={amend}
-              disabled={!head || busy}
+              disabled={!head || busy || merge !== null}
               onChange={(e) => toggleAmend(e.target.checked)}
             />
             <span className="switch-track" aria-hidden="true" />
@@ -437,7 +472,7 @@ export default function Changes({
           >
             {t.changes.stashAll}
           </button>
-          <button className="primary" disabled={!canCommit} onClick={commit}>
+          <button className="primary" disabled={!canCommit} onClick={commit} title={mergeBlocked ? t.conflicts.commitHint : undefined}>
             {amend ? t.changes.amendCommit : t.changes.commit}
             {staged.length > 0 ? t.changes.count(staged.length) : ""}
           </button>

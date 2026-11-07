@@ -1,0 +1,178 @@
+@use "@/styles/core" as *;
+
+// The conflict view reuses the diff's shell (.filediff, .fd-head) and adds the two columns and the result.
+.conflictview {
+  .cv-progress {
+    flex: none;
+    margin-left: auto;
+    font-size: 12px;
+    color: $muted;
+  }
+
+  .cv-file-actions {
+    flex: none;
+    display: flex;
+    gap: 6px;
+  }
+
+  .cv-error {
+    margin: 8px 12px 0;
+  }
+
+  .cv-loading {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .cv-notice {
+    margin: 12px;
+    color: $muted;
+  }
+}
+
+.cv-titles {
+  flex: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid $border;
+  background: $panel;
+  font-size: 12px;
+
+  > div {
+    @include truncate;
+    padding: 6px 12px;
+
+    + div {
+      border-left: 1px solid $border;
+    }
+
+    span {
+      margin-left: 6px;
+      font-family: $font-mono;
+      color: $muted;
+    }
+  }
+}
+
+.cv-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  font: 12.5px $font-code;
+  tab-size: 4;
+
+  pre {
+    margin: 0;
+    font: inherit;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+}
+
+// Text both sides agree on: shown once, across both columns, in a muted colour.
+.cv-common {
+  padding: 2px 12px;
+  color: $muted;
+
+  .cv-gap {
+    margin: 2px 0;
+    font: 11px $font-mono;
+    text-align: center;
+    opacity: 0.7;
+  }
+}
+
+.cv-block {
+  margin: 6px 0;
+  border-block: 1px solid $border;
+
+  .cv-block-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 3px 12px;
+    background: $panel;
+    font-size: 12px;
+    color: $muted;
+  }
+
+  &.resolved .cv-block-head {
+    color: $added;
+  }
+
+  .cv-choices {
+    display: flex;
+    gap: 2px;
+
+    button.on {
+      background: $accent-tint;
+      color: $text;
+    }
+  }
+
+  .cv-cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+
+    pre {
+      padding: 4px 12px;
+      min-height: 20px;
+
+      &.ours {
+        background: $info-tint;
+      }
+
+      &.theirs {
+        background: $added-tint;
+        border-left: 1px solid $border;
+      }
+
+      &.taken {
+        box-shadow: inset 3px 0 0 $accent;
+      }
+
+      &.dropped {
+        opacity: 0.45;
+      }
+
+      em {
+        color: $muted;
+      }
+    }
+  }
+}
+
+.cv-result {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid $border;
+
+  .cv-result-head {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    padding: 4px 12px;
+    background: $panel;
+    font-size: 12px;
+
+    span {
+      color: $muted;
+    }
+  }
+
+  textarea {
+    @include text-field(8px);
+    height: 190px;
+    min-height: 60px;
+    border-radius: 0;
+    border-width: 0;
+    resize: vertical;
+    font: 12.5px $font-code;
+    white-space: pre;
+    overflow: auto;
+  }
+}

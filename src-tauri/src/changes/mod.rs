@@ -1,3 +1,4 @@
+pub mod conflicts;
 pub mod hunks;
 
 use std::path::Path;
@@ -67,8 +68,12 @@ pub(crate) fn status_of(repo: &Repository) -> Result<Vec<FileChange>, String> {
     Ok(out)
 }
 
-fn stage(repo: &Repository, paths: &[String]) -> Result<(), String> {
+pub(crate) fn stage(repo: &Repository, paths: &[String]) -> Result<(), String> {
     let workdir = repo.workdir().ok_or("repository has no working directory")?;
+    // Staging marks a conflict as resolved, so a file that still has its markers would be committed with them.
+    if let Some(p) = paths.iter().find(|p| conflicts::has_unresolved_markers(repo, p)) {
+        return Err(format!("{p} still has conflict markers: resolve it in the conflict view first"));
+    }
     let mut index = repo.index().map_err(err)?;
     for p in paths {
         let rel = Path::new(p);
@@ -100,7 +105,7 @@ fn unstage(repo: &Repository, paths: &[String]) -> Result<(), String> {
 
 /// Throws away the unstaged changes of whole files: a modified or deleted file goes back to what the
 /// index holds (so anything staged is kept), an untracked file is deleted. Only paths that really have
-/// unstaged changes are accepted, and conflicted files are refused (there is no conflict UI yet).
+/// unstaged changes are accepted, and conflicted files are refused (resolve them in the conflict view).
 fn discard(repo: &Repository, paths: &[String]) -> Result<(), String> {
     let status = status_of(repo)?;
     let mut restore = Vec::new();
@@ -134,7 +139,7 @@ fn discard(repo: &Repository, paths: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-fn commit_staged(repo: &mut Repository, message: &str) -> Result<Oid, String> {
+pub(crate) fn commit_staged(repo: &mut Repository, message: &str) -> Result<Oid, String> {
     let message = git2::message_prettify(message, None).map_err(err)?;
     if message.trim().is_empty() {
         return Err("Commit message is empty".into());

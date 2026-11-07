@@ -18,6 +18,7 @@ import CommitDetail from "@/features/commit/CommitDetail";
 import StashDialog from "@/features/changes/StashDialog";
 import FileHistory from "@/features/commit/FileHistory";
 import FileDiff from "@/features/commit/FileDiff";
+import ConflictView from "@/features/conflicts/ConflictView";
 import Graph from "@/features/graph/Graph";
 import TagDialog from "@/features/graph/TagDialog";
 import InteractiveRebase from "@/features/rebase/InteractiveRebase";
@@ -63,6 +64,8 @@ export default function RepoView({
   const [openFile, setOpenFile] = useState<CommitFile | null>(null);
   // An uncommitted file (staged or not) shown in the centre; chosen from the Changes panel.
   const [openWorkingFile, setOpenWorkingFile] = useState<{ path: string; staged: boolean; status: ChangeKind } | null>(null);
+  // A conflicted file (path) shown in the centre in the conflict view; chosen from the Changes panel.
+  const [resolving, setResolving] = useState<string | null>(null);
   // The history of one file shown in the centre (from the Changes right-click menu), and the commit of it whose diff is open.
   const [history, setHistory] = useState<{
     file: string;
@@ -85,6 +88,7 @@ export default function RepoView({
     setRenaming(null);
     closeCommit();
     setOpenWorkingFile(null);
+    setResolving(null);
     setHistory(null);
     setSearchOpen(false);
     setRebasing(base);
@@ -99,6 +103,7 @@ export default function RepoView({
     setSelectedCommit(commit);
     setOpenFile(null);
     setOpenWorkingFile(null);
+    setResolving(null);
     setHistory(null);
   };
   // Right-click > Drop commit: confirm what will be lost and rewritten, then drop it.
@@ -230,6 +235,7 @@ export default function RepoView({
       setOpenWorkingFile(null); // the files may have changed under an open working-tree diff
       reload();
       if (outcome === "upToDate") await showInfo(t.repo.mergeUpToDate(source), t.repo.mergeTitle);
+      if (outcome === "conflicts") await showInfo(t.conflicts.merged(source), t.repo.mergeTitle);
     } catch (e) {
       await showError(String(e), t.repo.mergeTitle);
     }
@@ -302,6 +308,7 @@ export default function RepoView({
     if (rebasing) return;
     setOpenFile(null);
     setOpenWorkingFile(null);
+    setResolving(null);
     setHistory(null);
     setSearchOpen(true);
     setSearchFocus((k) => k + 1);
@@ -358,6 +365,7 @@ export default function RepoView({
           onDone={() => {
             closeCommit(); // the selected commit may be gone now
             setOpenWorkingFile(null);
+            setResolving(null);
             setHistory(null);
             reload();
           }}
@@ -420,12 +428,12 @@ export default function RepoView({
             <div className="center">
               <BusyBar path={path} panel="graph" />
               {/* The graph stays mounted (just hidden) while a file is open, so its scroll position survives. */}
-              <div className={"center-pane" + (openFile || openWorkingFile || history ? " hidden" : "")}>
+              <div className={"center-pane" + (openFile || openWorkingFile || resolving || history ? " hidden" : "")}>
                 <Graph
                   path={path}
                   refreshKey={graphKey}
                   selectedId={selectedCommit?.id ?? null}
-                  keyboard={!rebasing && !openFile && !openWorkingFile && !renaming && !history}
+                  keyboard={!rebasing && !openFile && !openWorkingFile && !resolving && !renaming && !history}
                   onSelectCommit={selectCommit}
                   onSelectWip={() => {
                     closeCommit(); // back to the working-directory changes in the right panel
@@ -464,7 +472,7 @@ export default function RepoView({
                     file={history.file}
                     from={history.from}
                     refreshKey={graphKey}
-                    active={history.entry === null && !openFile && !openWorkingFile}
+                    active={history.entry === null && !openFile && !openWorkingFile && !resolving}
                     openId={history.entry?.id ?? null}
                     onOpen={(entry) => setHistory({ ...history, entry })}
                     onClose={() => setHistory(null)}
@@ -487,6 +495,18 @@ export default function RepoView({
                   source={{ kind: "commit", id: selectedCommit.id, shortId: selectedCommit.shortId }}
                   file={openFile}
                   onClose={() => setOpenFile(null)}
+                />
+              )}
+              {resolving && !openFile && !rebasing && (
+                <ConflictView
+                  path={path}
+                  file={resolving}
+                  refreshKey={graphKey}
+                  onClose={() => setResolving(null)}
+                  onResolved={() => {
+                    setResolving(null);
+                    reload(); // the file leaves the conflict list; the merge may be ready to commit
+                  }}
                 />
               )}
               {openWorkingFile && !openFile && (
@@ -569,21 +589,29 @@ export default function RepoView({
             path={path}
             refreshKey={graphKey}
             hidden={renaming !== null || selectedCommit !== null}
-            selected={openWorkingFile && { path: openWorkingFile.path, staged: openWorkingFile.staged }}
+            selected={openWorkingFile ? { path: openWorkingFile.path, staged: openWorkingFile.staged } : resolving ? { path: resolving, staged: false } : null}
             // A diff would open underneath the rebase screen.
             onSelectFile={(f) => {
               if (rebasing) return;
               setHistory(null); // the file diff takes over the centre
-              setOpenWorkingFile(f);
+              if (f.status === "conflicted") {
+                setOpenWorkingFile(null);
+                setResolving(f.path);
+              } else {
+                setResolving(null);
+                setOpenWorkingFile(f);
+              }
             }}
             onFileHistory={(file) => {
               if (rebasing) return;
               setOpenFile(null);
               setOpenWorkingFile(null);
+              setResolving(null);
               setHistory({ file, from: null, entry: null });
             }}
             onCommitted={() => {
               setOpenWorkingFile(null); // what was committed no longer has a working diff
+              setResolving(null);
               reload();
             }}
           />

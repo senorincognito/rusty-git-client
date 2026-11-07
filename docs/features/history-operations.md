@@ -3,8 +3,19 @@
 ## Merging a branch
 - Right-click a **local branch** (*Merge <branch> into <current>*) or a **remote branch** (*Merge <remote>/<branch> into the current branch*) to merge it into
   the checked-out branch. A dialog asks first. A merge commit is created with Git's default message, or the branch simply fast-forwards when it can; uncommitted
-  changes are set aside and restored. If the branch is already contained you are told so. Conflicts are not resolved in the app yet: the merge is
-  cancelled, the conflicting files are named and nothing changes. Not available on a detached HEAD.
+  changes are set aside and restored. If the branch is already contained you are told so. **Conflicts**: with a clean working directory the merge stops and leaves them
+  for the conflict view (see below); with uncommitted changes it is cancelled, the files are named and nothing changes. Not available on a detached HEAD.
+
+## Resolving merge conflicts
+- A merge (or a pull that merges) that stops on conflicts shows a banner at the top of the Changes panel (*Merge in progress*, files left, **Abort merge**),
+  the conflicted files carry a red **!** badge in the Unstaged list, and the commit message is pre-filled with git's merge message.
+- Click a conflicted file to open the **conflict view** in the centre: the *Current* (checked-out) and *Incoming* versions side by side, with each conflict
+  offering **Use current / Use incoming / Use both**, text both sides agree on shortened to its ends, and the **Result** underneath, which can be edited by hand
+  (choosing again replaces the edits). **Mark as resolved** saves the result and stages the file once every conflict has a choice.
+- The header buttons **Use current** / **Use incoming** resolve the whole file at once; they also handle binary files and a file one side deleted
+  (the button then reads *(delete file)*). Staging a file that still has conflict markers is refused.
+- When no file is left the banner says so; **Commit** finishes the merge (the message may be edited; it works with nothing staged). Amend is off during a merge.
+  **Abort merge** (confirmed) puts everything back as it was. Rebase, cherry-pick and revert still cancel on conflicts.
 
 ## Rebasing onto a branch
 - Right-click a **local branch** and choose **Rebase `<current>` onto `<branch>`**: the checked-out branch's own commits are replayed on top of that branch (they get new ids), like

@@ -40,6 +40,6 @@ Esc leaves text fields and the terminal alone, so it never interferes with typin
 - Tags in the sidebar
 - Merge and rebase as standalone actions, revert commit
 - Unstaging a single line (staging and discarding one are built)
-- A conflict-resolution UI (a pull that conflicts is cancelled and the repository left untouched)
+- Conflict resolution for rebases, cherry-pick and revert (only merges, and pulls that merge, stop for the conflict view; the others are cancelled)
 - Syntax highlighting and intra-line diff highlighting, side-by-side diff
 - Multiple remotes work, but only the target remote is used to publish new branches

@@ -14,12 +14,15 @@ pub enum MergeOutcome {
     FastForward,
     /// A merge commit was created.
     Merged,
+    /// The merge stopped with conflicts, which are left in the working directory for the conflict view.
+    Conflicts,
 }
 
 /// Merges `target` (a full ref name such as `refs/heads/x` or `refs/remotes/origin/x`) into the checked-out branch
-/// with the system git, like `git merge --no-edit --autostash`. Uncommitted changes are set aside and restored. There
-/// is no conflict screen yet, so a merge with conflicts is cancelled and the repository is left exactly as it was.
-fn merge(path: &str, target: &str) -> Result<MergeOutcome, String> {
+/// with the system git, like `git merge --no-edit`. With a clean working directory a merge with conflicts stops and
+/// leaves them for the conflict view. With uncommitted changes (set aside by `--autostash` and restored afterwards) it
+/// is cancelled instead: git would keep them hidden in the autostash until the merge ends.
+pub(crate) fn merge(path: &str, target: &str) -> Result<MergeOutcome, String> {
     if !target.starts_with("refs/") {
         return Err(format!("\"{target}\" is not a branch"));
     }
@@ -46,8 +49,25 @@ fn merge(path: &str, target: &str) -> Result<MergeOutcome, String> {
     let fast_forward = repo.graph_descendant_of(to, from).map_err(err)?;
 
     let retry = format!("git merge {short}");
-    crate::toolbar::sync::run_git(path, &["merge", "--no-edit", "--autostash", target])
-        .map_err(|original| crate::toolbar::sync::cancel_unfinished(path, &retry, original))?;
+    if crate::changes::status_of(&repo)?.is_empty() {
+        return match crate::toolbar::sync::run_git(path, &["merge", "--no-edit", target]) {
+            Ok(_) if fast_forward => Ok(MergeOutcome::FastForward),
+            Ok(_) => Ok(MergeOutcome::Merged),
+            Err(_) if crate::changes::conflicts::stopped_on_conflicts(path) => Ok(MergeOutcome::Conflicts),
+            Err(original) => Err(crate::toolbar::sync::cancel_unfinished(path, &retry, original)),
+        };
+    }
+    crate::toolbar::sync::run_git(path, &["merge", "--no-edit", "--autostash", target]).map_err(|original| {
+        let message = crate::toolbar::sync::cancel_unfinished(path, &retry, original);
+        match message.contains("has conflicts") {
+            true => format!(
+                "{message}
+
+To resolve conflicts in the app, commit or stash your uncommitted changes first."
+            ),
+            false => message,
+        }
+    })?;
     Ok(if fast_forward { MergeOutcome::FastForward } else { MergeOutcome::Merged })
 }
 
@@ -112,7 +132,7 @@ mod tests {
     }
 
     #[test]
-    fn a_conflicting_merge_is_cancelled() {
+    fn a_conflicting_merge_with_uncommitted_changes_is_cancelled() {
         let (dir, repo) = new_repo("merge-conflict");
         let mut cfg = repo.config().unwrap();
         cfg.set_str("user.name", "T").unwrap();
@@ -127,9 +147,12 @@ mod tests {
         commit_file(&repo, &dir, "f.txt", "theirs", "T");
         switch(&repo, &main);
         let mine = commit_file(&repo, &dir, "f.txt", "mine", "M");
+        std::fs::write(dir.join("loose.txt"), "uncommitted").unwrap();
 
         let e = merge(p, "refs/heads/other").unwrap_err();
         assert!(e.contains("conflicts") && e.contains("f.txt") && e.contains("nothing was changed"), "{e}");
+        assert!(e.contains("commit or stash"), "{e}");
+        assert!(dir.join("loose.txt").exists());
         assert_eq!(repo.state(), RepositoryState::Clean);
         assert_eq!(head(&repo).id(), mine);
         assert_eq!(std::fs::read_to_string(dir.join("f.txt")).unwrap(), "mine");

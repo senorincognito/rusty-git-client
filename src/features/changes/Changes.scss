@@ -6,6 +6,34 @@
   position: relative;
 }
 
+// Shown while a merge is stopped on conflicts or waiting for its commit.
+.merge-banner {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  background: $added-tint;
+  border-bottom: 1px solid $border;
+
+  &.conflicts {
+    background: $removed-tint;
+  }
+
+  > div {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  span {
+    color: $muted;
+  }
+}
+
 // Covers the panel while stage / unstage / discard / commit runs. It fades in after a short delay, so quick
 // operations (most of them) never flash it.
 .changes-lock {

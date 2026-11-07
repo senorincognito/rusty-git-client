@@ -62,6 +62,7 @@ the module path to be visible from the crate root.
 | `history/drop.rs` | graph context menu | `get_drop_info`, `drop_latest_commit` (drop one commit) |
 | `history/test_support.rs` | tests only | small repositories with real commits for the history tests |
 | `changes/mod.rs` | `features/changes` | status, stage/unstage, `discard_paths` (whole-file discard), `create_commit` (new or `amend`), `get_head_commit` |
+| `changes/conflicts.rs` | `features/conflicts`, `features/changes` | merge conflicts left in place: `get_merge_state`, `get_conflict` (working file parsed into text/conflict segments, `parse_markers`), `resolve_conflict_side_cmd` (system git `checkout --ours/--theirs` + `add`, or `rm`), `save_resolution_cmd`, `abort_merge_cmd`; `stage` refuses a conflicted file that still has markers |
 | `changes/hunks.rs` | diff view | `stage_hunk`, `discard_hunk`, `unstage_hunk`: apply one hunk of a file's staged/unstaged changes (see Product decisions) |
 | `commit/file_history.rs` | `features/commit/FileHistory` | `get_file_history`: `git log --follow --name-status` for one file (≤ 500 commits), parsed into id/author/time/status/path-at-that-commit/oldPath |
 | `commit/mod.rs` | `features/commit` | all diff rendering: `get_commit_detail` (files of a commit, renames), `get_file_diff` (a commit's file), `get_working_diff` (staged/unstaged file); shared `diff_options` + `render_diff` |
@@ -329,6 +330,8 @@ app data dir and `localStorage` are not migrated, so saved settings and the rece
 - Commit detail diffs are against the **first parent**; renames detected; 2000-file and 20 000-line caps;
   binary/over-5 MB files are not previewed. The diff view has three modes (`FileDiff` `mode`, header buttons, persisted as `diff.mode`): *Full file* (default), *Changes* (the backend's context-only diff) and *Side by side*. **Side by side** uses the full-file diff (`full = mode !== "hunks"`) and only changes how `rows` are built: `del`/`add` runs are flushed as `pair` rows (the i-th removed line next to the i-th added one, blanks opposite the longer run), context lines appear on both sides; hunk headings stay full-width rows, so hunk buttons, ▲/▼ navigation (`hunkTops`) and the virtual list (fixed `ROW_H`) are unchanged. Each half is `flex: 1 0 auto` with a min-width of the longest line (`--cols`, capped at 300) so the row scrolls as one. Line stage/discard work per half (`LineTarget.side`; `targetOf(row, side)`) but a single line at a time: the text-selection multi-select reads one `.tx` per row and would run across both halves. Scrollbar marks use `mod` for a removed line facing an added one.
 
+- **Merge conflicts** (`changes/conflicts.rs`, `features/conflicts/ConflictView`, banner in `Changes`): only `merge` and `pull_with(.., "merge")` stop on conflicts, and only with a **clean working directory**: `git merge --autostash` keeps the stashed changes hidden until the merge ends (`MERGE_AUTOSTASH`), and libgit2's commit would never restore them, so a dirty tree keeps the old behaviour (autostash, abort with `cancel_unfinished`, message adds "commit or stash first"). `merge` returns `MergeOutcome::Conflicts`, the pull returns an Ok message. The state is git's own (MERGE_HEAD + index conflicts): `get_merge_state` feeds the banner and pre-fills the message, and the existing `commit_staged` already concludes a merge (extra parents, `cleanup_state`). The view parses the *working file's* markers (so editor edits count), keeps every line's own EOL (textarea values read back with LF, so a hand-edited result is converted back to the file's EOL), and chooses per conflict in the frontend; whole-file side buttons go through system git so filters apply and a deleted side deletes the file. The commit button is enabled during a merge with nothing staged, disabled while conflicts remain. Resolve/abort are not in the undo journal (snapshots can't capture a conflicted index; the merge commit itself is undoable as usual). Sides are named as in a merge: a rebase swaps ours/theirs, so reuse for rebase needs a mapping. UI untested in the running app.
+
 ## Pitfalls learned the hard way
 
 **libgit2 / git2 0.21**
@@ -487,6 +490,6 @@ Release), and a Windows code-signing certificate to avoid the SmartScreen "unkno
 ## Not implemented yet
 
 Tags overview/sidebar list (deliberately none), pushing tags; unstaging a single line (staging and discarding one are built); merge/rebase as standalone actions; discard
-changes and stash; conflict resolution UI (pulls with conflicts are aborted); syntax highlighting and intra-line diff highlighting; side-by-side diff; a
+changes and stash; conflict resolution for rebase/cherry-pick/revert (merges and merge-pulls have it); syntax highlighting and intra-line diff highlighting; side-by-side diff; a
 "you rewrote pushed history, force push instead" hint in the diverged-pull dialog; a conflict preview
 (`git merge-tree`) before pulling.

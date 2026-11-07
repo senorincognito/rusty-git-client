@@ -261,8 +261,9 @@ fn divergence(path: &str) -> Result<Divergence, String> {
 
 /// Pulls when fast-forwarding is not possible: "merge" adds a merge commit, "rebase" replays the
 /// local commits on top of the upstream. Uncommitted changes are set aside and restored
-/// (--autostash). If the result has conflicts there is no way to resolve them in the app yet,
-/// so the operation is cancelled and the repository is left exactly as it was.
+/// (--autostash). A rebase with conflicts is cancelled and the repository is left exactly as it was.
+/// A merge with a clean working directory stops on its conflicts for the conflict view instead (see
+/// `graph::merge::merge`): there the message says so, and it is cancelled only when changes were set aside.
 fn pull_with(path: &str, mode: &str) -> Result<String, String> {
     let s = sync_status(&open(path)?)?;
     if s.branch.is_none() {
@@ -271,12 +272,19 @@ fn pull_with(path: &str, mode: &str) -> Result<String, String> {
     if s.upstream.is_none() {
         return Err("The current branch has no upstream to pull from. Push it first.".into());
     }
+    let clean = crate::changes::status_of(&open(path)?)?.is_empty();
     let (args, retry_hint): (&[&str], &str) = match mode {
+        "merge" if clean => (&["pull", "--no-rebase", "--no-edit"], "git pull --no-rebase"),
         "merge" => (&["pull", "--no-rebase", "--no-edit", "--autostash"], "git pull --no-rebase"),
         "rebase" => (&["pull", "--rebase", "--autostash"], "git pull --rebase"),
         other => return Err(format!("Unknown pull mode \"{other}\"")),
     };
-    run_git(path, args).map_err(|original| cancel_unfinished(path, retry_hint, original))
+    match run_git(path, args) {
+        Err(_) if mode == "merge" && clean && crate::changes::conflicts::stopped_on_conflicts(path) => {
+            Ok(crate::changes::conflicts::stopped_message(path))
+        }
+        result => result.map_err(|original| cancel_unfinished(path, retry_hint, original)),
+    }
 }
 
 /// After a failed pull: if git stopped halfway (merge or rebase with conflicts), cancel it and say
@@ -698,22 +706,43 @@ mod tests {
     }
 
     #[test]
-    fn conflicting_pulls_are_cancelled_and_leave_no_trace() {
+    fn conflicting_rebase_pulls_are_cancelled_and_leave_no_trace() {
         let (base, a, b) = clone_pair("pull-conflict");
         let ap = a.to_str().unwrap();
         // Both sides rewrite the same file differently.
         diverge(&a, &b, "base.txt", "base.txt");
         let before = git(&a, &["rev-parse", "HEAD"]);
 
-        for mode in ["merge", "rebase"] {
-            let e = pull_with(ap, mode).unwrap_err();
-            assert!(e.contains("conflicts in: base.txt") && e.contains("cancelled"), "{mode}: {e}");
-            // Nothing half-done is left behind.
-            assert_eq!(open(ap).unwrap().state(), RepositoryState::Clean, "{mode}");
-            assert_eq!(git(&a, &["rev-parse", "HEAD"]), before, "{mode}");
-            assert_eq!(fs::read_to_string(a.join("base.txt")).unwrap(), "mine commit", "{mode}");
-            assert!(!a.join(".git").join("rebase-merge").exists() && !a.join(".git").join("MERGE_HEAD").exists());
-        }
+        let e = pull_with(ap, "rebase").unwrap_err();
+        assert!(e.contains("conflicts in: base.txt") && e.contains("cancelled"), "{e}");
+        // Nothing half-done is left behind.
+        assert_eq!(open(ap).unwrap().state(), RepositoryState::Clean);
+        assert_eq!(git(&a, &["rev-parse", "HEAD"]), before);
+        assert_eq!(fs::read_to_string(a.join("base.txt")).unwrap(), "mine commit");
+        assert!(!a.join(".git").join("rebase-merge").exists() && !a.join(".git").join("MERGE_HEAD").exists());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_conflicting_merge_pull_stops_for_the_conflict_view_unless_changes_were_set_aside() {
+        let (base, a, b) = clone_pair("pull-merge-conflict");
+        let ap = a.to_str().unwrap();
+        diverge(&a, &b, "base.txt", "base.txt");
+        let before = git(&a, &["rev-parse", "HEAD"]);
+
+        // Uncommitted changes: cancelled, so nothing stays hidden in an autostash.
+        fs::write(a.join("loose.txt"), "x").unwrap();
+        let e = pull_with(ap, "merge").unwrap_err();
+        assert!(e.contains("cancelled"), "{e}");
+        assert_eq!(open(ap).unwrap().state(), RepositoryState::Clean);
+        assert!(a.join("loose.txt").exists());
+        fs::remove_file(a.join("loose.txt")).unwrap();
+
+        // A clean working directory: the merge stops with its conflicts in place.
+        let message = pull_with(ap, "merge").unwrap();
+        assert!(message.contains("conflicts in: base.txt"), "{message}");
+        assert_eq!(open(ap).unwrap().state(), RepositoryState::Merge);
+        assert_eq!(git(&a, &["rev-parse", "HEAD"]), before);
         let _ = fs::remove_dir_all(&base);
     }
 }

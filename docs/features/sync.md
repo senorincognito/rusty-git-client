@@ -5,8 +5,8 @@
   merge. When the branches have diverged, a dialog lists the commits on each side and offers
   **Merge** (the default: keeps every commit, adds a merge commit) or **Rebase** (replays your
   commits on top of the upstream, giving them new ids). Uncommitted changes are set aside and
-  restored. If there are conflicts, the pull is cancelled with the file names and the repository is
-  left exactly as it was (resolve in the terminal for now). Push publishes a new branch to `origin` and sets its upstream.
+  restored. A rebase with conflicts is cancelled with the file names and the repository is
+  left exactly as it was; a merge with a clean working directory stops so the conflicts can be resolved in the Changes panel (with uncommitted changes it is cancelled too). Push publishes a new branch to `origin` and sets its upstream.
 - **Sign-in prompt** (macOS): when a fetch, pull or push needs a username, password, token or SSH passphrase and no credential
   helper supplies it, a dialog asks for it (for GitHub and similar over HTTPS enter a personal access token as the password).
   Cancel aborts the operation. If Git has a credential helper (e.g. the macOS keychain) it stores the login afterwards. Windows

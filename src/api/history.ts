@@ -127,9 +127,12 @@ export const cherryPick = (path: string, id: string) => invoke<void>("cherry_pic
 /** Reverses a commit (hex id) with a new commit on the checked-out branch. Conflicts cancel it like cherryPick. */
 export const revertCommit = (path: string, id: string) => invoke<void>("revert_commit_cmd", { path, id });
 
-export type MergeOutcome = "upToDate" | "fastForward" | "merged";
+export type MergeOutcome = "upToDate" | "fastForward" | "merged" | "conflicts";
 
-/** Merges a branch (full ref name) into the checked-out one. Conflicts cancel the merge and reject with the files named. */
+/**
+ * Merges a branch (full ref name) into the checked-out one. With a clean working directory, conflicts stop the merge
+ * and are left for the conflict view ("conflicts"); with uncommitted changes they cancel it and reject with the files named.
+ */
 export const mergeBranch = (path: string, target: string) => invoke<MergeOutcome>("merge_branch_cmd", { path, target });
 
 export type RebaseOutcome = "upToDate" | "fastForward" | "rebased";

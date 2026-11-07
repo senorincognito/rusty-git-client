@@ -42,8 +42,9 @@ export interface Divergence {
 export const getDivergence = (path: string) => invoke<Divergence>("get_divergence", { path });
 
 /**
- * Pulls by merging or rebasing. On conflicts the operation is cancelled and the repository is
- * left as it was; the rejection says which files conflicted.
+ * Pulls by merging or rebasing. A rebase with conflicts is cancelled and the repository is left as it was; the
+ * rejection says which files conflicted. A merge with a clean working directory stops on its conflicts instead and
+ * resolves with a message naming them (they are resolved in the conflict view); with uncommitted changes it is cancelled too.
  */
 export const gitPullWith = (path: string, mode: "merge" | "rebase") =>
   invoke<string>("git_pull_with", { path, mode });
