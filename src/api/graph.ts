@@ -63,6 +63,21 @@ export interface SearchResult {
 export const searchCommits = (path: string, query: string) =>
   invoke<SearchResult>("search_commits", { path, query });
 
+export interface TagInfo {
+  name: string;
+  /** The commit the tag points at (an annotated tag is followed to it). */
+  id: string;
+  shortId: string;
+  annotated: boolean;
+  /** The annotation's text of an annotated tag. */
+  message: string | null;
+  /** Unix seconds: when an annotated tag was made, else the commit's time. */
+  time: number;
+}
+
+/** Every tag of the repository, newest first. */
+export const getTags = (path: string) => invoke<TagInfo[]>("get_tags", { path });
+
 /** Tags a commit (hex id): lightweight, or annotated when `message` has text. Rejects when the name is taken or invalid. */
 export const createTag = (path: string, id: string, name: string, message: string | null) =>
   invoke<void>("create_tag_cmd", { path, id, name, message });

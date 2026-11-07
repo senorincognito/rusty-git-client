@@ -40,7 +40,7 @@
   names the files; both need a checked-out branch; Undo takes them back) and **Copy commit SHA** (full id to the clipboard).
 - Right-click a commit that is the tip of another branch (local or remote): **Merge <branch> into the current branch** and **Rebase the current
   branch onto <branch>** (same confirmations and conflict handling as in the sidebar; a submenu when several branches sit on the commit).
-- **Tags**: tags are shown as yellow labels on their commit (there is no tags panel) and are found by the search. Right-click a commit > **Add tag…** asks for a name
+- **Tags**: tags are shown as yellow labels on their commit (the left panel's Tags tab lists them all) and are found by the search. Right-click a commit > **Add tag…** asks for a name
   and an optional message: without a message the tag is lightweight, with one it is annotated and records you as the tagger. An existing name is refused, not moved.
   A commit that carries tags has **Delete tag `<name>`** (a **Delete tag** submenu when several), which asks first. Tags are local: nothing is pushed and a deleted
   tag stays on any server it was pushed to. Add/delete tag are not in the Undo history.

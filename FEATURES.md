@@ -37,7 +37,6 @@ Esc leaves text fields and the terminal alone, so it never interferes with typin
 
 ## Not yet implemented
 
-- Tags in the sidebar
 - Merge and rebase as standalone actions, revert commit
 - Unstaging a single line (staging and discarding one are built)
 - Conflict resolution for rebases, cherry-pick and revert (only merges, and pulls that merge, stop for the conflict view; the others are cancelled)

@@ -60,6 +60,7 @@ pub fn run() {
             graph::get_graph,
             graph::search::search_commits,
             graph::tags::create_tag_cmd,
+            graph::tags::get_tags,
             graph::tags::delete_tag_cmd,
             history::drop::drop_latest_commit,
             history::drop::get_drop_info,

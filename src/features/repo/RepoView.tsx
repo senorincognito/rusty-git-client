@@ -415,6 +415,7 @@ export default function RepoView({
               onFastForward={fastForwardTo}
               onMerge={mergeInto}
               onRebaseOnto={rebaseOntoBranch}
+              onDeleteTag={deleteTagByName}
               onStashApplied={reload}
               onAllStashesDropped={(ids) => {
                 if (selectedCommit && ids.includes(selectedCommit.id)) closeCommit();

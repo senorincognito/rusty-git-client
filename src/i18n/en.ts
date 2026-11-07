@@ -137,8 +137,12 @@ export const en = {
   },
 
   sidebar: {
-    filterPlaceholder: "Filter branches and stashes…",
-    filterLabel: "Filter branches and stashes",
+    filterPlaceholder: "Filter this list…",
+    filterLabel: "Filter the list",
+    tabs: "Left panel",
+    tabBranches: "Branches",
+    tabStashes: "Stashes",
+    tabTags: "Tags",
     clearFilter: "Clear the filter",
     clearFilterHint: "Clear the filter (Esc)",
     branchNameLabel: "New branch name",
@@ -284,6 +288,20 @@ export const en = {
     urlPlaceholder: "https://github.com/user/repo.git",
     urlLabel: "Remote URL",
     submit: "Add remote",
+  },
+
+  tags: {
+    title: "Tags",
+    none: "No tags yet. Right-click a commit in the graph to add one.",
+    noMatch: "No tag matches the filter.",
+    annotated: "annotated",
+    show: "Show commit",
+    showHint: "Show the tagged commit in the right panel",
+    copy: "Copy tag name",
+    delete: "Delete tag…",
+    deleteHint: "Delete this tag (asks first). Only the local tag goes.",
+    tooltip: (tag: { name: string; shortId: string; message: string | null; time: number }) =>
+      `${tag.name} → ${tag.shortId}\n${tag.message ? tag.message + "\n" : ""}${new Date(tag.time * 1000).toLocaleString()}`,
   },
 
   stashes: {

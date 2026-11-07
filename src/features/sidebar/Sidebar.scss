@@ -8,7 +8,45 @@
   flex-direction: column;
   background: $panel;
   border-right: 1px solid $border;
+}
+
+// The tabs at the top: Branches, Stashes, Tags.
+.sidetabs {
+  flex: none;
+  display: flex;
+  border-bottom: 1px solid $border;
+
+  button {
+    flex: 1;
+    padding: 8px 4px;
+    background: none;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    @include section-label;
+
+    &:hover {
+      color: $text;
+    }
+
+    &.active {
+      color: $text;
+      border-bottom-color: $accent;
+    }
+  }
+}
+
+// One tab's content: it holds the sections, which share its height like they used to share the whole panel's.
+.sidepane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
+
+  &[hidden] {
+    display: none;
+  }
 }
 
 // Covers the whole panel while a branch switch runs, so nothing in it can be used halfway through.
@@ -116,6 +154,23 @@
   flex: none;
   font-size: 11px;
   color: $muted;
+}
+
+.taglist li {
+  &.selected {
+    background: $accent-tint;
+  }
+}
+
+.tag-kind,
+.tag-id {
+  flex: none;
+  font-size: 11px;
+  color: $muted;
+}
+
+.tag-id {
+  font-family: $font-mono;
 }
 
 .stashlist li {

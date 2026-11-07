@@ -54,7 +54,7 @@ the module path to be visible from the crate root.
 | `graph/pick.rs` | graph context menu | `cherry_pick_cmd`, `revert_commit_cmd`: system git `cherry-pick`/`revert --no-edit` (`-m 1` for merge commits); a conflict is aborted with `<op> --abort` (`cancel_unfinished` only knows merge/rebase) and the files named; `Kind::Switch`. "Checkout this commit" is `checkout_commit_cmd` in `sidebar/branches.rs` (safe checkout + detached HEAD); "Copy commit SHA" is frontend-only (`navigator.clipboard`) |
 | `graph/rebase_onto.rs` | local branch context menu | `get_rebase_onto_info` (commits replayed, pushed, merges for the confirmation), `rebase_onto_cmd`: `git rebase --autostash <ref>` of the checked-out branch onto a branch (full ref name); returns `upToDate`/`fastForward`/`rebased` |
 | `graph/search.rs` | `features/graph/SearchBar` | `search_commits(path, query)`: full messages (case-insensitive substring) and id prefixes (≥ 4 hex digits) over the graph's own topological order (`take_order`, shared with `build_graph` and its cache), so each hit carries its row index; max 1000 hits (`truncated`) |
-| `graph/tags.rs` | graph context menu | `create_tag_cmd` (lightweight, or annotated when a message is given; existing names refused, never moved), `delete_tag_cmd` (local only). Plain `git2`, outside the undo journal (snapshots don't cover tags). Tags are already `kind: "tag"` `RefLabel`s in the graph; `search.rs` also matches tag names via `inputs.labels`; UI: `features/graph/TagDialog`, `RepoView.tagging`/`deleteTagByName` |
+| `graph/tags.rs` | graph context menu | `create_tag_cmd` (lightweight, or annotated when a message is given; existing names refused, never moved), `delete_tag_cmd` (local only), `get_tags` (every tag with its peeled commit, annotated flag and message, newest first; feeds the sidebar's Tags tab). Plain `git2`, outside the undo journal (snapshots don't cover tags). Tags are already `kind: "tag"` `RefLabel`s in the graph; `search.rs` also matches tag names via `inputs.labels`; UI: `features/graph/TagDialog`, `RepoView.tagging`/`deleteTagByName`, `features/sidebar/Tags` |
 | `graph/reset.rs` | graph context menu | `get_reset_info` (what a reset would remove/add, pushed count, uncommitted files), `reset_to_commit` (soft/mixed/hard) |
 | `history/mod.rs` | graph context menu | shared by the rewrites below: `is_pushed`, `rewrite_plan`, `rebuild_with_messages`, `move_head_to`, `blocking` |
 | `history/rename.rs` | `features/rename` | `get_rename_info`, `rename_commit_message` (rewrites the commit and its descendants) |
@@ -128,15 +128,15 @@ app data dir and `localStorage` are not migrated, so saved settings and the rece
 - **Delete synced branches** (Local branches "⋯" menu, `delete_synced_branches`): "synced" = has an upstream and the local tip equals the upstream tip (`ahead == 0 && behind == 0` in `BranchInfo`, so relative to the last fetch), never the checked-out branch. The UI lists them in the confirmation; the backend re-checks each name before deleting and silently skips any that no longer qualify. One undo step (`Kind::Keep`).
 - **Sidebar section headlines** can carry a "⋯" menu (`Section`'s `action` prop): Local branches (*New branch…*, which shows
   the same `NewBranchForm` the toolbar's Branch button uses, inline) and Remotes. Keep branch creation in that one form.
-- **Sidebar layout**: `.sidebar` does not scroll itself; each open `Section` is a shrinkable flex item (min height 96px) whose
-  `.sidebox-body` scrolls, so all headlines stay visible. Keep new sidebar sections inside `Section`.
+- **Sidebar layout**: three tabs (`Sidebar`: Branches = Local + Remotes, Stashes, Tags; the choice is `localStorage` `sidebarTab`). Every tab's `.sidepane` stays mounted and is just `hidden`, so lists keep their data and scroll. `.sidebar` itself does not scroll; inside a pane each open `Section` is a shrinkable flex item (min height 96px) whose
+  `.sidebox-body` scrolls, so all headlines stay visible. Keep new sidebar sections inside `Section` and inside the right tab.
 - **Vertical resizing**: `components/Splitter` is the bar (pointer capture, arrows, double-click reset; owner measures in `onStart` and applies
   the offset in `onMove`). `Section` takes `resizeKey`: a user height is `flex: 0 1 <px>` (persisted as `sectionHeight.<key>`, clamped so the
   other boxes keep their minimum or headline; the last box has no bar). `Changes` splits the Unstaged/Staged lists with a persisted
   fraction (`changesSplit`) via `flex-grow`. The commit detail panel is not split.
 - **Branch folders**: `sidebar/branchTree.tsx` (`buildRows`, `useClosedFolders`, `FolderRow`) turns names into folder/branch rows
   (folders first, nested by `/`, closed state not persisted, all open while a filter is active); local and remote lists both use it.
-- **Sidebar filter**: `Sidebar` owns one text field (not persisted) and passes `filter` to `LocalBranches`, `Remotes` and `Stashes`,
+- **Sidebar filter**: `Sidebar` owns one text field (not persisted) and passes `filter` to `LocalBranches`, `Remotes`, `Stashes` and `Tags`,
   which list only matches via `matchesFilter` (`sidebar/filter.ts`: all words, case-insensitive). New sidebar lists should take it too.
 - **Popovers/menus** use `ContextMenu` (portal to `<body>`; supports `checked`, `separatorBefore`,
   `danger`, `disabled`+`title`, and groups via `children`: a submenu snapped to the right of the parent item (flips left
@@ -489,7 +489,7 @@ Release), and a Windows code-signing certificate to avoid the SmartScreen "unkno
 
 ## Not implemented yet
 
-Tags overview/sidebar list (deliberately none), pushing tags; unstaging a single line (staging and discarding one are built); merge/rebase as standalone actions; discard
+pushing tags; unstaging a single line (staging and discarding one are built); merge/rebase as standalone actions; discard
 changes and stash; conflict resolution for rebase/cherry-pick/revert (merges and merge-pulls have it); syntax highlighting and intra-line diff highlighting; side-by-side diff; a
 "you rewrote pushed history, force push instead" hint in the diverged-pull dialog; a conflict preview
 (`git merge-tree`) before pulling.
