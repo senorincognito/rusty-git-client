@@ -139,52 +139,57 @@ fn discard(repo: &Repository, paths: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-pub(crate) fn commit_staged(repo: &mut Repository, message: &str) -> Result<Oid, String> {
+pub(crate) fn commit_staged(repo: &Repository, message: &str) -> Result<Oid, String> {
     let message = git2::message_prettify(message, None).map_err(err)?;
     if message.trim().is_empty() {
         return Err("Commit message is empty".into());
     }
-    let sig = repo.signature().map_err(|_| "Git identity not set. Configure user.name and user.email.".to_string())?;
+    // Checked here for a readable error; git itself does the committing.
+    repo.signature().map_err(|_| "Git identity not set. Configure user.name and user.email.".to_string())?;
 
-    // Concluding a merge: the merge heads become additional parents.
-    // (Collected first because mergehead_foreach needs `&mut repo`.)
     let merging = repo.state() == RepositoryState::Merge;
-    let mut merge_heads = Vec::new();
-    if merging {
-        repo.mergehead_foreach(|oid| {
-            merge_heads.push(*oid);
-            true
-        })
-        .map_err(err)?;
-    }
-
     let mut index = repo.index().map_err(err)?;
     if index.has_conflicts() {
         return Err("Resolve conflicts before committing".into());
     }
     let tree = repo.find_tree(index.write_tree().map_err(err)?).map_err(err)?;
 
-    let mut parents = Vec::new();
-    if let Ok(head) = repo.head() {
-        parents.push(head.peel_to_commit().map_err(err)?);
-    }
-    for oid in merge_heads {
-        parents.push(repo.find_commit(oid).map_err(err)?);
-    }
-
-    if !merging && parents.first().is_some_and(|p| p.tree_id() == tree.id()) {
-        return Err("Nothing staged to commit".into());
-    }
-    if !merging && parents.is_empty() && tree.is_empty() {
-        return Err("Nothing staged to commit".into());
+    // Concluding a merge is allowed with nothing staged; otherwise an unchanged tree is an empty commit.
+    if !merging {
+        match repo.head().and_then(|h| h.peel_to_commit()) {
+            Ok(parent) if parent.tree_id() == tree.id() => return Err("Nothing staged to commit".into()),
+            Err(_) if tree.is_empty() => return Err("Nothing staged to commit".into()),
+            _ => {}
+        }
     }
 
-    let parent_refs: Vec<_> = parents.iter().collect();
-    let oid = repo.commit(Some("HEAD"), &sig, &sig, &message, &tree, &parent_refs).map_err(err)?;
-    if merging {
-        repo.cleanup_state().map_err(err)?;
+    // `git commit` reads MERGE_HEAD itself, so a merge gets its extra parents and its state cleaned up.
+    git_commit(repo, &message, false)
+}
+
+/// Commits the index with the system `git` (not libgit2, which never runs hooks) so `pre-commit`,
+/// `prepare-commit-msg`, `commit-msg` and `post-commit` run, and signing and `commit.template` apply. A hook that
+/// rejects the commit comes back as the error, with its output. The message goes through a file because stdin is
+/// closed and a long message should not hit argument limits.
+fn git_commit(repo: &Repository, message: &str, amend: bool) -> Result<Oid, String> {
+    let workdir = repo.workdir().and_then(Path::to_str).ok_or("repository has no working directory")?;
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
+    let file = std::env::temp_dir().join(format!("rusty-git-msg-{}-{stamp}", std::process::id()));
+    std::fs::write(&file, message).map_err(|e| format!("Could not write the commit message: {e}"))?;
+    let file_arg = file.to_string_lossy().into_owned();
+
+    let mut args = vec!["commit", "--cleanup=verbatim", "-F", file_arg.as_str()];
+    if amend {
+        args.push("--amend");
     }
-    Ok(oid)
+    let result = crate::toolbar::sync::run_git_with(workdir, &args, None);
+    let _ = std::fs::remove_file(&file);
+    result?;
+
+    // `repo` may have cached refs from before git moved them; look HEAD up on a fresh handle.
+    let fresh = Repository::open(workdir).map_err(err)?;
+    let id = fresh.head().and_then(|h| h.peel_to_commit()).map_err(err)?.id();
+    Ok(id)
 }
 
 /// Replaces the last commit with the current index and `message`, like `git commit --amend`.
@@ -199,8 +204,7 @@ fn amend_head(repo: &Repository, message: &str) -> Result<Oid, String> {
     }
     let head =
         repo.head().and_then(|h| h.peel_to_commit()).map_err(|_| "There is no previous commit to amend".to_string())?;
-    let committer =
-        repo.signature().map_err(|_| "Git identity not set. Configure user.name and user.email.".to_string())?;
+    repo.signature().map_err(|_| "Git identity not set. Configure user.name and user.email.".to_string())?;
 
     let mut index = repo.index().map_err(err)?;
     if index.has_conflicts() {
@@ -211,7 +215,7 @@ fn amend_head(repo: &Repository, message: &str) -> Result<Oid, String> {
         return Err("Nothing to amend: no staged changes and the message is unchanged".into());
     }
 
-    head.amend(Some("HEAD"), None, Some(&committer), None, Some(&message), Some(&tree)).map_err(err)
+    git_commit(repo, &message, true)
 }
 
 #[derive(Serialize, Debug)]
@@ -309,7 +313,7 @@ mod tests {
     fn stage_commit_unstage_flow() {
         let dir = std::env::temp_dir().join(format!("gc-changes-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
-        let mut repo = Repository::init(&dir).unwrap();
+        let repo = Repository::init(&dir).unwrap();
         let mut cfg = repo.config().unwrap();
         cfg.set_str("user.name", "Test").unwrap();
         cfg.set_str("user.email", "test@example.com").unwrap();
@@ -324,7 +328,7 @@ mod tests {
         assert_eq!(find(&st, "sub/b.txt").unstaged, Some("new"));
 
         // Nothing staged yet, including on an unborn branch.
-        assert!(commit_staged(&mut repo, "x").is_err());
+        assert!(commit_staged(&repo, "x").is_err());
 
         stage(&repo, &["a.txt".into(), "sub/b.txt".into()]).unwrap();
         assert_eq!(find(&status_of(&repo).unwrap(), "a.txt").staged, Some("new"));
@@ -333,8 +337,8 @@ mod tests {
         unstage(&repo, &["sub/b.txt".into()]).unwrap();
         assert_eq!(find(&status_of(&repo).unwrap(), "sub/b.txt").staged, None);
 
-        assert!(commit_staged(&mut repo, "   ").is_err());
-        commit_staged(&mut repo, "first").unwrap();
+        assert!(commit_staged(&repo, "   ").is_err());
+        commit_staged(&repo, "first").unwrap();
         let st = status_of(&repo).unwrap();
         assert!(st.iter().all(|c| c.path != "a.txt"));
         assert_eq!(find(&st, "sub/b.txt").unstaged, Some("new"));
@@ -352,7 +356,7 @@ mod tests {
         assert_eq!(find(&st, "a.txt").unstaged, Some("modified"));
 
         // Nothing staged -> refuse.
-        assert_eq!(commit_staged(&mut repo, "again").unwrap_err(), "Nothing staged to commit");
+        assert_eq!(commit_staged(&repo, "again").unwrap_err(), "Nothing staged to commit");
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -361,7 +365,7 @@ mod tests {
     fn discard_whole_files() {
         let dir = std::env::temp_dir().join(format!("gc-discard-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
-        let mut repo = Repository::init(&dir).unwrap();
+        let repo = Repository::init(&dir).unwrap();
         let mut cfg = repo.config().unwrap();
         cfg.set_str("user.name", "Test").unwrap();
         cfg.set_str("user.email", "test@example.com").unwrap();
@@ -370,7 +374,7 @@ mod tests {
             fs::write(dir.join(name), text).unwrap();
         }
         stage(&repo, &["mod.txt".into(), "gone.txt".into(), "both.txt".into()]).unwrap();
-        commit_staged(&mut repo, "base").unwrap();
+        commit_staged(&repo, "base").unwrap();
 
         fs::write(dir.join("mod.txt"), "m2").unwrap();
         fs::remove_file(dir.join("gone.txt")).unwrap();
@@ -407,10 +411,47 @@ mod tests {
     }
 
     #[test]
+    fn commit_and_amend_run_hooks() {
+        let dir = std::env::temp_dir().join(format!("gc-hooks-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let repo = Repository::init(&dir).unwrap();
+        let mut cfg = repo.config().unwrap();
+        cfg.set_str("user.name", "Test").unwrap();
+        cfg.set_str("user.email", "t@example.com").unwrap();
+        cfg.set_str("core.autocrlf", "false").unwrap();
+        cfg.set_str("commit.gpgsign", "false").unwrap();
+        let hooks = dir.join(".git").join("hooks");
+        fs::create_dir_all(&hooks).unwrap();
+        fs::write(dir.join("a.txt"), "one").unwrap();
+        stage(&repo, &["a.txt".into()]).unwrap();
+
+        // A failing pre-commit rejects the commit and its output reaches the caller.
+        fs::write(hooks.join("pre-commit"), "#!/bin/sh\necho 'lint failed' >&2\nexit 1\n").unwrap();
+        let e = commit_staged(&repo, "first").unwrap_err();
+        assert!(e.contains("lint failed"), "{e}");
+        assert!(repo.head().is_err());
+
+        // commit-msg may rewrite the message; post-commit runs after success.
+        fs::write(hooks.join("pre-commit"), "#!/bin/sh\nexit 0\n").unwrap();
+        fs::write(hooks.join("commit-msg"), "#!/bin/sh\necho 'Signed' >> \"$1\"\n").unwrap();
+        fs::write(hooks.join("post-commit"), "#!/bin/sh\ntouch post-commit-ran\n").unwrap();
+        let first = commit_staged(&repo, "first").unwrap();
+        assert!(repo.find_commit(first).unwrap().message().unwrap().contains("Signed"));
+        assert!(dir.join("post-commit-ran").exists());
+
+        // Amend goes through the hooks too.
+        fs::write(hooks.join("pre-commit"), "#!/bin/sh\necho 'no amend' >&2\nexit 1\n").unwrap();
+        assert!(amend_head(&repo, "reworded").unwrap_err().contains("no amend"));
+        assert_eq!(repo.head().unwrap().target(), Some(first));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn amend_rewrites_last_commit() {
         let dir = std::env::temp_dir().join(format!("gc-amend-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
-        let mut repo = Repository::init(&dir).unwrap();
+        let repo = Repository::init(&dir).unwrap();
         let set_user = |repo: &Repository, name: &str| {
             let mut cfg = repo.config().unwrap();
             cfg.set_str("user.name", name).unwrap();
@@ -425,7 +466,7 @@ mod tests {
 
         fs::write(dir.join("a.txt"), "one").unwrap();
         stage(&repo, &["a.txt".into()]).unwrap();
-        let first = commit_staged(&mut repo, "first").unwrap();
+        let first = commit_staged(&repo, "first").unwrap();
         let info = head_commit(&repo).unwrap();
         assert_eq!((info.message.as_str(), info.pushed), ("first", false));
 

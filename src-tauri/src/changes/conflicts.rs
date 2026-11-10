@@ -415,7 +415,7 @@ mod tests {
 
     #[test]
     fn resolving_by_side_and_by_content_lets_the_merge_commit() {
-        let (dir, mut repo) = conflicted_merge("conflict-resolve");
+        let (dir, repo) = conflicted_merge("conflict-resolve");
         let before = repo.head().unwrap().peel_to_commit().unwrap().id();
 
         // Incoming deleted g.txt: taking "theirs" removes it; taking "ours" would keep it.
@@ -428,7 +428,7 @@ mod tests {
         let state = merge_state(&repo).unwrap().unwrap();
         assert_eq!(state.conflicts, 0);
 
-        let id = crate::changes::commit_staged(&mut repo, &state.message).unwrap();
+        let id = crate::changes::commit_staged(&repo, &state.message).unwrap();
         let merged = repo.find_commit(id).unwrap();
         assert_eq!(merged.parent_count(), 2);
         assert_eq!(merged.parent_id(0).unwrap(), before);
