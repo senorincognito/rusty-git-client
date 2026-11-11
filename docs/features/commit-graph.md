@@ -10,7 +10,9 @@
 - The commit you are on (HEAD) stands out: a ring around its node, an accent bar and a faint tint on its row, and a bold message. The chip of the checked-out
   branch is filled with a halo. Commits that are not part of the checked-out branch's history (other branches' own commits) are shown faded, so the
   current branch's history is easy to follow.
-- Columns for message, author, date and short hash.
+- Columns for graph, message, author, date and short hash, under a header row. Drag the edge between two headers to resize a column (double-click the edge
+  to reset it); the message column takes the remaining width and the graph column clips its lanes when narrowed. Right-click the header to show or hide the
+  graph, author, date and SHA columns, or to reset them all. Both are remembered.
 - Virtualised rendering, with history loaded in pages of 1000 as you scroll.
 - While there are uncommitted changes, a dashed "N file changes in working directory" row sits on top
   of the graph, joined to the commit you are on. Clicking it shows those changes (the staging panel) in

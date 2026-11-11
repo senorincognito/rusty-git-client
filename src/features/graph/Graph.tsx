@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { useArrowKeys } from "@/hooks/useArrowKeys";
+import { usePersistentState } from "@/hooks/usePersistentState";
 import { getGraph, type Edge, type Graph as GraphData, type GraphRow, type RefLabel, type SearchHit } from "@/api/graph";
 import type { ResetMode } from "@/api/history";
 import ContextMenu, { type MenuItem } from "@/components/ContextMenu";
@@ -68,6 +69,67 @@ const doubleClickTarget = (row: GraphRow): RefLabel | undefined => {
   const targets = checkoutTargets(row);
   return targets.find((r) => r.kind === "branch") ?? (targets.length === 1 ? targets[0] : undefined);
 };
+
+type ColumnId = "graph" | "author" | "date" | "sha";
+const COLUMN_IDS: ColumnId[] = ["graph", "author", "date", "sha"];
+/** Widths in px; the graph column's default is the width its lanes need, so it has none here. */
+const DEFAULT_WIDTH = { author: 140, date: 150, sha: 56 };
+const MIN_WIDTH: Record<ColumnId, number> = { graph: 24, author: 50, date: 70, sha: 40 };
+const MAX_WIDTH = 600;
+
+interface Columns {
+  shown: Record<ColumnId, boolean>;
+  widths: Partial<Record<ColumnId, number>>;
+}
+const DEFAULT_COLUMNS: Columns = { shown: { graph: true, author: true, date: true, sha: true }, widths: {} };
+
+const validColumns = (v: unknown): v is Columns => {
+  const c = v as Columns | null;
+  return (
+    !!c &&
+    typeof c === "object" &&
+    !!c.shown &&
+    COLUMN_IDS.every((id) => typeof c.shown[id] === "boolean") &&
+    !!c.widths &&
+    COLUMN_IDS.every((id) => c.widths[id] === undefined || typeof c.widths[id] === "number")
+  );
+};
+
+/** A drag handle on a header cell's edge. `grow` is +1 when dragging right widens the column, -1 when it narrows it. */
+function ColumnHandle({
+  side,
+  grow,
+  width,
+  onResize,
+  onReset,
+}: {
+  side: "left" | "right";
+  grow: 1 | -1;
+  width: () => number;
+  onResize: (width: number) => void;
+  onReset: () => void;
+}) {
+  const start = useRef<{ x: number; w: number } | null>(null);
+  return (
+    <div
+      className={`gh-handle ${side}`}
+      role="separator"
+      aria-orientation="vertical"
+      title={t.graph.columnResizeHint}
+      onClick={(e) => e.stopPropagation()}
+      onDoubleClick={onReset}
+      onPointerDown={(e) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        start.current = { x: e.clientX, w: width() };
+      }}
+      onPointerMove={(e) => {
+        if (start.current) onResize(Math.round(start.current.w + (e.clientX - start.current.x) * grow));
+      }}
+      onPointerUp={() => (start.current = null)}
+      onPointerCancel={() => (start.current = null)}
+    />
+  );
+}
 
 const dateFmt = new Intl.DateTimeFormat(undefined, {
   year: "numeric",
@@ -162,6 +224,9 @@ export default function Graph({
   const generation = useRef(0);
   // Commits loaded so far (without the uncommitted-changes row): where the next page starts, and how much a reload asks for.
   const loaded = useRef(0);
+  const [cols, setCols] = usePersistentState<Columns>("graph.columns", DEFAULT_COLUMNS, validColumns);
+  const [headMenu, setHeadMenu] = useState<{ x: number; y: number } | null>(null);
+  const closeHeadMenu = useCallback(() => setHeadMenu(null), []);
   const [focusTick, setFocusTick] = useState(0);
   const [menu, setMenu] = useState<{ x: number; y: number; row: GraphRow } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
@@ -399,6 +464,31 @@ export default function Graph({
   };
 
   const laneWidth = Math.min(Math.max(graph?.maxLanes ?? 1, 1), 24) * LANE_W + 4;
+  // The graph column may be narrower than its lanes (the rest is clipped) or wider.
+  const lanesCol = cols.widths.graph ?? laneWidth;
+  const colWidth = (id: ColumnId) => (id === "graph" ? lanesCol : (cols.widths[id] ?? DEFAULT_WIDTH[id]));
+  const resizeCol = (id: ColumnId, w: number) =>
+    setCols({ ...cols, widths: { ...cols.widths, [id]: Math.min(MAX_WIDTH, Math.max(MIN_WIDTH[id], w)) } });
+  const resetCol = (id: ColumnId) => {
+    const widths = { ...cols.widths };
+    delete widths[id];
+    setCols({ ...cols, widths });
+  };
+  const headCell = (id: Exclude<ColumnId, "graph">, label: string) =>
+    cols.shown[id] && (
+      <div className={`gh-cell gh-${id}`} style={{ width: colWidth(id) }}>
+        {label}
+        <ColumnHandle side="left" grow={-1} width={() => colWidth(id)} onResize={(w) => resizeCol(id, w)} onReset={() => resetCol(id)} />
+      </div>
+    );
+  const headMenuItems: MenuItem[] = [
+    ...COLUMN_IDS.map((id) => ({
+      label: t.graph.columnNames[id],
+      checked: cols.shown[id],
+      onClick: () => setCols({ ...cols, shown: { ...cols.shown, [id]: !cols.shown[id] } }),
+    })),
+    { label: t.graph.columnsReset, separatorBefore: true, onClick: () => setCols(DEFAULT_COLUMNS) },
+  ];
 
   if (error) return <p className="error pad">{error}</p>;
   if (graph && rows.length === 0) return <p className="muted pad">{t.graph.noCommits}</p>;
@@ -416,6 +506,26 @@ export default function Graph({
           onClose={onCloseSearch}
         />
       )}
+      <div
+        className="graph-head"
+        title={t.graph.columnsHint}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setHeadMenu({ x: e.clientX, y: e.clientY });
+        }}
+      >
+        {cols.shown.graph && (
+          <div className="gh-cell gh-graph" style={{ width: lanesCol }}>
+            {t.graph.columnNames.graph}
+            <ColumnHandle side="right" grow={1} width={() => lanesCol} onResize={(w) => resizeCol("graph", w)} onReset={() => resetCol("graph")} />
+          </div>
+        )}
+        <div className="gh-cell gh-subject">{t.graph.columnMessage}</div>
+        {headCell("author", t.graph.columnNames.author)}
+        {headCell("date", t.graph.columnNames.date)}
+        {headCell("sha", t.graph.columnNames.sha)}
+      </div>
+      {headMenu && <ContextMenu x={headMenu.x} y={headMenu.y} onClose={closeHeadMenu} items={headMenuItems} />}
       <div className="graph" ref={scroller} onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}>
         {!graph && (
           <div className="graph-loading" role="status">
@@ -450,7 +560,11 @@ export default function Graph({
                 setMenu({ x: e.clientX, y: e.clientY, row });
               }}
             >
-              <RowGraph row={row} width={laneWidth} />
+              {cols.shown.graph && (
+                <div className="lanes-col" style={{ width: lanesCol }}>
+                  <RowGraph row={row} width={laneWidth} />
+                </div>
+              )}
               <div className="subject">
                 {row.refs.map((r) => (
                   <span key={r.kind + r.name} className={`ref ${r.kind}${r.isHead ? " head" : ""}`}>
@@ -459,9 +573,21 @@ export default function Graph({
                 ))}
                 <span className="summary">{row.summary}</span>
               </div>
-              <span className="author">{row.author}</span>
-              <span className="date">{row.isWip ? "" : dateFmt.format(new Date(row.time * 1000))}</span>
-              <span className="sha">{row.shortId}</span>
+              {cols.shown.author && (
+                <span className="author" style={{ width: colWidth("author") }}>
+                  {row.author}
+                </span>
+              )}
+              {cols.shown.date && (
+                <span className="date" style={{ width: colWidth("date") }}>
+                  {row.isWip ? "" : dateFmt.format(new Date(row.time * 1000))}
+                </span>
+              )}
+              {cols.shown.sha && (
+                <span className="sha" style={{ width: colWidth("sha") }}>
+                  {row.shortId}
+                </span>
+              )}
             </div>
           ))}
         </div>

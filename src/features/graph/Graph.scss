@@ -74,10 +74,77 @@
   }
 }
 
-// The SVG with this row's piece of the branch lines.
-.lanes {
+// Clips this row's lanes when the graph column is narrower than they are.
+.lanes-col {
   flex: none;
   margin-left: 8px;
+  overflow: hidden;
+  line-height: 0;
+}
+
+// The SVG with this row's piece of the branch lines.
+.lanes {
+  display: block;
+}
+
+// Column headers, laid out like a row (same gap and side padding; the right padding adds the scrollbar's width).
+.graph-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 26px 4px 8px;
+  border-bottom: 1px solid $border;
+  color: $muted;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.gh-cell {
+  position: relative;
+  flex: none;
+  overflow: visible;
+
+  &.gh-subject {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+// A drag strip centred in the gap beside a cell.
+.gh-handle {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 12px;
+  cursor: col-resize;
+  touch-action: none;
+
+  &.left {
+    left: -9px;
+  }
+
+  &.right {
+    right: -9px;
+  }
+
+  &::after {
+    content: "";
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    left: 5px;
+    width: 1px;
+    background: $border;
+  }
+
+  &:hover::after {
+    background: $accent;
+  }
 }
 
 .subject {
@@ -134,17 +201,18 @@
   font-size: 12px;
 }
 
+// Widths are set inline (user-resizable).
 .author {
-  width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .date {
-  width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sha {
-  width: 56px;
+  overflow: hidden;
   font-family: $font-mono;
 }
