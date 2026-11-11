@@ -139,7 +139,7 @@ fn discard(repo: &Repository, paths: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-pub(crate) fn commit_staged(repo: &Repository, message: &str) -> Result<Oid, String> {
+pub(crate) fn commit_staged(repo: &Repository, message: &str, no_verify: bool) -> Result<Oid, String> {
     let message = git2::message_prettify(message, None).map_err(err)?;
     if message.trim().is_empty() {
         return Err("Commit message is empty".into());
@@ -164,14 +164,15 @@ pub(crate) fn commit_staged(repo: &Repository, message: &str) -> Result<Oid, Str
     }
 
     // `git commit` reads MERGE_HEAD itself, so a merge gets its extra parents and its state cleaned up.
-    git_commit(repo, &message, false)
+    git_commit(repo, &message, false, no_verify)
 }
 
 /// Commits the index with the system `git` (not libgit2, which never runs hooks) so `pre-commit`,
 /// `prepare-commit-msg`, `commit-msg` and `post-commit` run, and signing and `commit.template` apply. A hook that
 /// rejects the commit comes back as the error, with its output. The message goes through a file because stdin is
-/// closed and a long message should not hit argument limits.
-fn git_commit(repo: &Repository, message: &str, amend: bool) -> Result<Oid, String> {
+/// closed and a long message should not hit argument limits. `no_verify` passes `--no-verify`, which skips `pre-commit`
+/// and `commit-msg` (git still runs `prepare-commit-msg` and `post-commit`).
+fn git_commit(repo: &Repository, message: &str, amend: bool, no_verify: bool) -> Result<Oid, String> {
     let workdir = repo.workdir().and_then(Path::to_str).ok_or("repository has no working directory")?;
     let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
     let file = std::env::temp_dir().join(format!("rusty-git-msg-{}-{stamp}", std::process::id()));
@@ -181,6 +182,9 @@ fn git_commit(repo: &Repository, message: &str, amend: bool) -> Result<Oid, Stri
     let mut args = vec!["commit", "--cleanup=verbatim", "-F", file_arg.as_str()];
     if amend {
         args.push("--amend");
+    }
+    if no_verify {
+        args.push("--no-verify");
     }
     let result = crate::toolbar::sync::run_git_with(workdir, &args, None);
     let _ = std::fs::remove_file(&file);
@@ -194,7 +198,7 @@ fn git_commit(repo: &Repository, message: &str, amend: bool) -> Result<Oid, Stri
 
 /// Replaces the last commit with the current index and `message`, like `git commit --amend`.
 /// The author (and author date) is kept; the committer becomes the current identity.
-fn amend_head(repo: &Repository, message: &str) -> Result<Oid, String> {
+fn amend_head(repo: &Repository, message: &str, no_verify: bool) -> Result<Oid, String> {
     let message = git2::message_prettify(message, None).map_err(err)?;
     if message.trim().is_empty() {
         return Err("Commit message is empty".into());
@@ -215,7 +219,7 @@ fn amend_head(repo: &Repository, message: &str) -> Result<Oid, String> {
         return Err("Nothing to amend: no staged changes and the message is unchanged".into());
     }
 
-    git_commit(repo, &message, true)
+    git_commit(repo, &message, true, no_verify)
 }
 
 #[derive(Serialize, Debug)]
@@ -281,13 +285,15 @@ pub async fn discard_paths(path: String, paths: Vec<String>) -> Result<(), Strin
         .await
 }
 
-/// Commits the index, or with `amend` replaces the last commit. Returns the commit id.
+/// Commits the index, or with `amend` replaces the last commit; `no_verify` skips the pre-commit and commit-msg
+/// hooks. Returns the commit id.
 #[tauri::command]
-pub async fn create_commit(path: String, message: String, amend: bool) -> Result<String, String> {
+pub async fn create_commit(path: String, message: String, amend: bool, no_verify: bool) -> Result<String, String> {
     let label = if amend { "Amend commit" } else { "Commit" };
     crate::undo::recorded(&path.clone(), label, crate::undo::Kind::Keep, || {
         blocking(path, move |r| {
-            if amend { amend_head(r, &message) } else { commit_staged(r, &message) }.map(|o| o.to_string())
+            if amend { amend_head(r, &message, no_verify) } else { commit_staged(r, &message, no_verify) }
+                .map(|o| o.to_string())
         })
     })
     .await
@@ -328,7 +334,7 @@ mod tests {
         assert_eq!(find(&st, "sub/b.txt").unstaged, Some("new"));
 
         // Nothing staged yet, including on an unborn branch.
-        assert!(commit_staged(&repo, "x").is_err());
+        assert!(commit_staged(&repo, "x", false).is_err());
 
         stage(&repo, &["a.txt".into(), "sub/b.txt".into()]).unwrap();
         assert_eq!(find(&status_of(&repo).unwrap(), "a.txt").staged, Some("new"));
@@ -337,8 +343,8 @@ mod tests {
         unstage(&repo, &["sub/b.txt".into()]).unwrap();
         assert_eq!(find(&status_of(&repo).unwrap(), "sub/b.txt").staged, None);
 
-        assert!(commit_staged(&repo, "   ").is_err());
-        commit_staged(&repo, "first").unwrap();
+        assert!(commit_staged(&repo, "   ", false).is_err());
+        commit_staged(&repo, "first", false).unwrap();
         let st = status_of(&repo).unwrap();
         assert!(st.iter().all(|c| c.path != "a.txt"));
         assert_eq!(find(&st, "sub/b.txt").unstaged, Some("new"));
@@ -356,7 +362,7 @@ mod tests {
         assert_eq!(find(&st, "a.txt").unstaged, Some("modified"));
 
         // Nothing staged -> refuse.
-        assert_eq!(commit_staged(&repo, "again").unwrap_err(), "Nothing staged to commit");
+        assert_eq!(commit_staged(&repo, "again", false).unwrap_err(), "Nothing staged to commit");
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -374,7 +380,7 @@ mod tests {
             fs::write(dir.join(name), text).unwrap();
         }
         stage(&repo, &["mod.txt".into(), "gone.txt".into(), "both.txt".into()]).unwrap();
-        commit_staged(&repo, "base").unwrap();
+        commit_staged(&repo, "base", false).unwrap();
 
         fs::write(dir.join("mod.txt"), "m2").unwrap();
         fs::remove_file(dir.join("gone.txt")).unwrap();
@@ -427,7 +433,7 @@ mod tests {
 
         // A failing pre-commit rejects the commit and its output reaches the caller.
         fs::write(hooks.join("pre-commit"), "#!/bin/sh\necho 'lint failed' >&2\nexit 1\n").unwrap();
-        let e = commit_staged(&repo, "first").unwrap_err();
+        let e = commit_staged(&repo, "first", false).unwrap_err();
         assert!(e.contains("lint failed"), "{e}");
         assert!(repo.head().is_err());
 
@@ -435,14 +441,27 @@ mod tests {
         fs::write(hooks.join("pre-commit"), "#!/bin/sh\nexit 0\n").unwrap();
         fs::write(hooks.join("commit-msg"), "#!/bin/sh\necho 'Signed' >> \"$1\"\n").unwrap();
         fs::write(hooks.join("post-commit"), "#!/bin/sh\ntouch post-commit-ran\n").unwrap();
-        let first = commit_staged(&repo, "first").unwrap();
+        let first = commit_staged(&repo, "first", false).unwrap();
         assert!(repo.find_commit(first).unwrap().message().unwrap().contains("Signed"));
         assert!(dir.join("post-commit-ran").exists());
 
         // Amend goes through the hooks too.
         fs::write(hooks.join("pre-commit"), "#!/bin/sh\necho 'no amend' >&2\nexit 1\n").unwrap();
-        assert!(amend_head(&repo, "reworded").unwrap_err().contains("no amend"));
+        assert!(amend_head(&repo, "reworded", false).unwrap_err().contains("no amend"));
         assert_eq!(repo.head().unwrap().target(), Some(first));
+
+        // "Skip hooks" gets past the failing pre-commit, for a commit and for an amend.
+        fs::write(dir.join("b.txt"), "two").unwrap();
+        stage(&repo, &["b.txt".into()]).unwrap();
+        assert!(commit_staged(&repo, "second", false).is_err());
+        let second = commit_staged(&repo, "second", true).unwrap();
+        assert_eq!(
+            repo.find_commit(second).unwrap().message().unwrap(),
+            "second
+"
+        );
+        let amended = amend_head(&repo, "second, reworded", true).unwrap();
+        assert_ne!(amended, second);
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -462,21 +481,21 @@ mod tests {
 
         // Nothing to amend yet.
         assert!(head_commit(&repo).is_none());
-        assert!(amend_head(&repo, "x").unwrap_err().contains("no previous commit"));
+        assert!(amend_head(&repo, "x", false).unwrap_err().contains("no previous commit"));
 
         fs::write(dir.join("a.txt"), "one").unwrap();
         stage(&repo, &["a.txt".into()]).unwrap();
-        let first = commit_staged(&repo, "first").unwrap();
+        let first = commit_staged(&repo, "first", false).unwrap();
         let info = head_commit(&repo).unwrap();
         assert_eq!((info.message.as_str(), info.pushed), ("first", false));
 
         // Nothing changed -> refuse; empty message -> refuse.
-        assert!(amend_head(&repo, "first").unwrap_err().contains("Nothing to amend"));
-        assert!(amend_head(&repo, "  ").is_err());
+        assert!(amend_head(&repo, "first", false).unwrap_err().contains("Nothing to amend"));
+        assert!(amend_head(&repo, "  ", false).is_err());
 
         // Message-only amend by someone else: author stays, committer changes, history unchanged.
         set_user(&repo, "Other");
-        let second = amend_head(&repo, "first, reworded").unwrap();
+        let second = amend_head(&repo, "first, reworded", false).unwrap();
         assert_ne!(first, second);
         let c = repo.find_commit(second).unwrap();
         assert_eq!(c.message(), Ok("first, reworded\n"));
@@ -489,7 +508,7 @@ mod tests {
         fs::write(dir.join("a.txt"), "two").unwrap();
         fs::write(dir.join("b.txt"), "new").unwrap();
         stage(&repo, &["a.txt".into(), "b.txt".into()]).unwrap();
-        let third = amend_head(&repo, "first, with more").unwrap();
+        let third = amend_head(&repo, "first, with more", false).unwrap();
         let tree = repo.find_commit(third).unwrap().tree().unwrap();
         assert_eq!(tree.len(), 2);
         assert!(status_of(&repo).unwrap().is_empty());
@@ -502,7 +521,7 @@ mod tests {
         assert!(head_commit(&repo).unwrap().pushed);
         fs::write(dir.join("c.txt"), "x").unwrap();
         stage(&repo, &["c.txt".into()]).unwrap();
-        amend_head(&repo, "first, with more").unwrap();
+        amend_head(&repo, "first, with more", false).unwrap();
         assert!(!head_commit(&repo).unwrap().pushed);
 
         let _ = fs::remove_dir_all(&dir);

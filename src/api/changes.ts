@@ -49,9 +49,9 @@ export const unstagePaths = (path: string, paths: string[]) =>
  * version, untracked files are deleted. Not undoable.
  */
 export const discardPaths = (path: string, paths: string[]) => invoke<void>("discard_paths", { path, paths });
-/** Commits the index; with `amend`, replaces the last commit instead. */
-export const createCommit = (path: string, message: string, amend = false) =>
-  invoke<string>("create_commit", { path, message, amend });
+/** Commits the index; with `amend`, replaces the last commit instead; with `noVerify`, skips the pre-commit and commit-msg hooks. */
+export const createCommit = (path: string, message: string, amend = false, noVerify = false) =>
+  invoke<string>("create_commit", { path, message, amend, noVerify });
 
 export interface HeadCommit {
   shortId: string;

@@ -428,7 +428,7 @@ mod tests {
         let state = merge_state(&repo).unwrap().unwrap();
         assert_eq!(state.conflicts, 0);
 
-        let id = crate::changes::commit_staged(&repo, &state.message).unwrap();
+        let id = crate::changes::commit_staged(&repo, &state.message, false).unwrap();
         let merged = repo.find_commit(id).unwrap();
         assert_eq!(merged.parent_count(), 2);
         assert_eq!(merged.parent_id(0).unwrap(), before);

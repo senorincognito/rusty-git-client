@@ -404,6 +404,8 @@ export const en = {
     amendHint: (shortId: string) => `Replace the last commit (${shortId}) instead of creating a new one`,
     nothingToAmend: "There is no commit to amend yet",
     amendPushed: "This commit is already pushed. Amending it rewrites history, so it will need a force push.",
+    skipHooks: "Skip hooks",
+    skipHooksHint: "Commit without running the pre-commit and commit-msg hooks (git commit --no-verify), for the next commit only",
     messagePlaceholder: "Commit message",
     stashAll: "Stash…",
     stashAllHint: "Move all uncommitted changes, including untracked files, into a stash",

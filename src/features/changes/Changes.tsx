@@ -134,6 +134,8 @@ export default function Changes({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [amend, setAmend] = useState(false);
+  // Skip the commit hooks for the next commit only: it is cleared after a successful commit, so it can't be forgotten on.
+  const [noVerify, setNoVerify] = useState(false);
   const [stashOpen, setStashOpen] = useState(false);
   const [head, setHead] = useState<HeadCommit | null>(null);
   // A merge that stopped on conflicts (or is waiting for its commit).
@@ -349,9 +351,10 @@ export default function Changes({
 
   const commit = () =>
     run(async () => {
-      await createCommit(path, message, amend);
+      await createCommit(path, message, amend, noVerify);
       setMessage("");
       setAmend(false);
+      setNoVerify(false);
       draft.current = "";
       onCommitted();
     });
@@ -442,6 +445,11 @@ export default function Changes({
             />
             <span className="switch-track" aria-hidden="true" />
             <span>{t.changes.amend}</span>
+          </label>
+          <label className={"switch" + (busy ? " disabled" : "")} title={t.changes.skipHooksHint}>
+            <input type="checkbox" role="switch" checked={noVerify} disabled={busy} onChange={(e) => setNoVerify(e.target.checked)} />
+            <span className="switch-track" aria-hidden="true" />
+            <span>{t.changes.skipHooks}</span>
           </label>
         </div>
         {amend && head?.pushed && (

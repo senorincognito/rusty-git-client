@@ -17,6 +17,9 @@
   `commit-msg`, `post-commit`), commit signing and `commit.template` apply as in a terminal. A hook that
   rejects the commit shows its output as the error and nothing is committed. Hooks can't ask questions
   (no terminal), and rewriting history from the graph (rename, drop, interactive rebase) does not run hooks.
+- **Skip hooks** switch beside Amend: the next commit or amend runs `git commit --no-verify`, so `pre-commit` and
+  `commit-msg` are skipped (`prepare-commit-msg` and `post-commit` still run, as in git). It switches itself off after a
+  successful commit, so it can't stay on by accident.
 - Commit is refused when there is no message, nothing is staged, conflicts are
   unresolved, or `user.name` / `user.email` aren't configured. Errors are shown in the panel.
 - Finishing an in-progress merge records the merge parents and clears the merge state.
