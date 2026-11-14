@@ -95,6 +95,48 @@
   user-select: none;
 }
 
+// The hint's SHA and its two small buttons; the hint itself lets clicks through to the line.
+.fv-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fv-sha {
+  font-style: normal;
+  color: $accent;
+}
+
+.fv-hintbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: $radius-sm;
+  color: $muted;
+  pointer-events: auto;
+  cursor: pointer;
+
+  &:hover {
+    background: $press-tint;
+    color: $text;
+  }
+
+  svg {
+    width: 13px;
+    height: 13px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+}
+
 .fv-editwrap {
   position: relative;
   height: 100%;

@@ -5,7 +5,7 @@ import type { CommitFile, HistoryEntry } from "@/api/commit";
 import { confirmDialog, showError, showInfo } from "@/api/dialog";
 import { checkoutCommit, checkoutLocalBranch, checkoutRemoteBranch, countUnmergedCommits, deleteLocalBranch } from "@/api/branches";
 import { countUnmergedRemoteCommits, deleteRemoteBranch } from "@/api/remotes";
-import { deleteTag, type RefLabel } from "@/api/graph";
+import { deleteTag, searchCommits, type RefLabel, type SearchHit } from "@/api/graph";
 import { applyStash, dropStash, popStash } from "@/api/stash";
 import { cherryPick, dropLatestCommit, fastForward, getDropInfo, getRebaseOntoInfo, getResetInfo, mergeBranch, rebaseOnto, resetToCommit, revertCommit, type ResetMode } from "@/api/history";
 import { deleteFile } from "@/api/files";
@@ -114,6 +114,19 @@ export default function RepoView({
     }
   };
   const filesMode = tab === "files" && !rebasing;
+  // The blame hint's link: show the graph with that commit selected, scrolled into view and its files on the right.
+  const [revealRequest, setRevealRequest] = useState<{ n: number; hit: SearchHit } | null>(null);
+  const showCommit = async (id: string) => {
+    changeTab("branches");
+    selectCommit({ id, shortId: id.slice(0, 7) });
+    try {
+      // The search knows each commit's row in the graph, which the graph needs to load that far and scroll there.
+      const hit = (await searchCommits(path, id)).hits.find((h) => h.id === id);
+      if (hit) setRevealRequest((r) => ({ n: (r?.n ?? 0) + 1, hit }));
+    } catch {
+      /* the commit stays selected; it just isn't scrolled to */
+    }
+  };
   const changeTab = (next: SidebarTab) => {
     setHistory(null); // a file's history belongs to the tab it was opened from
     if (next === "files") {
@@ -523,6 +536,7 @@ export default function RepoView({
                   hasChanges={changeCount > 0}
                   searchOpen={searchOpen && !rebasing}
                   searchFocus={searchFocus}
+                  revealRequest={revealRequest}
                   onCloseSearch={closeSearch}
                 />
               </div>
@@ -567,6 +581,7 @@ export default function RepoView({
                   onSaved={reload}
                   onDelete={removeFile}
                   onSendToTerminal={sendToTerminal}
+                  onShowCommit={showCommit}
                 />
               </div>
               {history && !rebasing && (

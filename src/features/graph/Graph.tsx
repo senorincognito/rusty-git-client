@@ -166,9 +166,12 @@ export default function Graph({
   searchOpen,
   searchFocus,
   onCloseSearch,
+  revealRequest,
 }: {
   path: string;
   refreshKey?: number;
+  /** Scroll to this commit (a new `n` is a new request), e.g. from the Files tab's blame hint. */
+  revealRequest?: { n: number; hit: SearchHit } | null;
   /** The commit whose details are open, if any (none: the working-directory changes are shown). */
   selectedId: string | null;
   /** Up/Down move the selection. Off while something else covers the graph (a diff, the rebase screen). */
@@ -346,6 +349,10 @@ export default function Graph({
       loadMore(reveal.index + 1 - loaded.current + PAGE);
     }
   }, [reveal, graph, rows, loadMore]);
+
+  useEffect(() => {
+    if (revealRequest) setReveal(revealRequest.hit);
+  }, [revealRequest]);
 
   const goToHit = (hit: SearchHit) => {
     onSelectCommit({ id: hit.id, shortId: hit.id.slice(0, 7) });

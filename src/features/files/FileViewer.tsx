@@ -34,6 +34,7 @@ export default function FileViewer({
   onSaved,
   onDelete,
   onSendToTerminal,
+  onShowCommit,
 }: {
   path: string;
   file: string | null;
@@ -45,6 +46,8 @@ export default function FileViewer({
   onDelete: (file: string) => void;
   /** Type a file or line reference into the terminal (RepoView opens it). */
   onSendToTerminal: (text: string) => void;
+  /** Open the graph with this commit (full id) selected. */
+  onShowCommit: (id: string) => void;
 }) {
   const [data, setData] = useState<{ file: string; content: FileContent } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +60,8 @@ export default function FileViewer({
   // The lines of the text area's selection, or just the cursor's line.
   const [caret, setCaret] = useState({ from: 1, to: 1 });
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  // The SHA just copied from the hint (shows a check mark for a moment).
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
   const [scroll, setScroll] = useState({ top: 0, left: 0 });
   const [blame, setBlame] = useState<{ key: string; value: LineBlame | null } | null>(null);
@@ -136,6 +141,11 @@ export default function FileViewer({
     }, 120);
     return () => window.clearTimeout(timer);
   }, [path, file, hintLine, refreshKey, startBlame]);
+  useEffect(() => {
+    if (copiedId === null) return;
+    const timer = window.setTimeout(() => setCopiedId(null), 1500);
+    return () => window.clearTimeout(timer);
+  }, [copiedId]);
   const hint = (() => {
     if (file === null || hintLine === null || hintText === null || blame?.key !== `${file}:${hintLine}`) return null;
     const lineText = hintText.split("\n")[hintLine - 1];
@@ -143,9 +153,55 @@ export default function FileViewer({
     return {
       row: hintLine - 1,
       cols: columns(lineText.replace(/\r$/, "")),
-      text: blame.value ? t.files.blame(blame.value) : t.files.blameUncommitted,
+      blame: blame.value,
     };
   })();
+  // The hint's content: SHA with a copy button and a link to the graph, then author and message. The buttons stop the
+  // click (which would otherwise pick or drop the line under them) and keep the text area's focus.
+  const hintContent = (blame: LineBlame | null) =>
+    blame ? (
+      <>
+        <span className="fv-sha">{blame.shortId}</span>
+        <button
+          className="fv-hintbtn"
+          title={copiedId === blame.id ? t.files.copiedSha : t.files.copyShaHint(blame.id)}
+          aria-label={t.files.copySha}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={(e) => {
+            e.stopPropagation();
+            navigator.clipboard?.writeText(blame.id).then(() => setCopiedId(blame.id), () => {});
+          }}
+        >
+          {copiedId === blame.id ? (
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M3 8.5l3.2 3L13 4.5" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
+              <path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2" />
+            </svg>
+          )}
+        </button>
+        <button
+          className="fv-hintbtn"
+          title={t.files.showCommitHint}
+          aria-label={t.files.showCommit}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onShowCommit(blame.id);
+          }}
+        >
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M9 2.5h4.5V7M13.5 2.5L7.5 8.5M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3" />
+          </svg>
+        </button>
+        <span>{t.files.blameRest(blame)}</span>
+      </>
+    ) : (
+      t.files.blameUncommitted
+    );
 
   const save = async () => {
     if (file === null || draft === null || saving) return;
@@ -257,7 +313,7 @@ export default function FileViewer({
                     className="fv-hint"
                     style={{ top: hint.row * ROW_H - scroll.top, left: `calc(16px + ${hint.cols + 4}ch - ${scroll.left}px)` }}
                   >
-                    {hint.text}
+                    {hintContent(hint.blame)}
                   </span>
                 )}
               </div>
@@ -299,7 +355,7 @@ export default function FileViewer({
                         style={{ top: ((range?.from ?? hint.row + 1) - 1) * ROW_H, height: ((range?.to ?? hint.row + 1) - (range?.from ?? hint.row + 1) + 1) * ROW_H }}
                       />
                       <span className="fv-hint" style={{ top: hint.row * ROW_H, left: `calc(16px + ${hint.cols + 4}ch)` }}>
-                        {hint.text}
+                        {hintContent(hint.blame)}
                       </span>
                     </>
                   )}
