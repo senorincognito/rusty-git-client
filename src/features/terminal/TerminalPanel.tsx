@@ -18,10 +18,13 @@ export default function TerminalPanel({
   path,
   open,
   onClose,
+  paste,
 }: {
   path: string;
   open: boolean;
   onClose: () => void;
+  /** Text to type into the shell (without Enter) once it runs; a new `id` is a new request. */
+  paste?: { id: number; text: string } | null;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const term = useRef<XTerm | null>(null);
@@ -29,6 +32,8 @@ export default function TerminalPanel({
   const session = useRef(0);
   const started = useRef(false);
   const exited = useRef(false);
+  const sessionReady = useRef(false);
+  const queued = useRef<string | null>(null);
   const pathRef = useRef(path);
   const openRef = useRef(open);
   const [ready, setReady] = useState(false);
@@ -37,10 +42,20 @@ export default function TerminalPanel({
   pathRef.current = path;
   openRef.current = open;
 
+  // xterm's paste() brackets the text when the program asked for it, so a TUI takes it as pasted, not typed.
+  const flush = useCallback(() => {
+    const t = term.current;
+    if (queued.current === null || !t || !sessionReady.current) return;
+    t.paste(queued.current);
+    queued.current = null;
+    t.focus();
+  }, []);
+
   const start = useCallback(async () => {
     const t = term.current;
     if (!t) return;
     exited.current = false;
+    sessionReady.current = false;
     const id = ++nextSessionId;
     session.current = id;
     t.reset();
@@ -51,11 +66,14 @@ export default function TerminalPanel({
     }
     try {
       await termStart(pathRef.current, id, t.cols, t.rows);
+      sessionReady.current = true;
+      flush();
     } catch (e) {
       exited.current = true;
+      queued.current = null;
       t.write(text.terminal.startFailed(String(e)));
     }
-  }, []);
+  }, [flush]);
 
   // Create the emulator once and connect it to the backend.
   useEffect(() => {
@@ -163,6 +181,14 @@ export default function TerminalPanel({
     }
     term.current?.focus();
   }, [open, ready, start]);
+
+  // A paste request waits for the shell (a closed panel is started by opening it); an exited shell is restarted.
+  useEffect(() => {
+    if (!paste) return;
+    queued.current = paste.text;
+    if (exited.current) start();
+    else flush();
+  }, [paste, start, flush]);
 
   // A different repository gets a fresh shell in its folder.
   useEffect(() => {

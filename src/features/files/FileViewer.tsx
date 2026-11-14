@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { showError } from "@/api/dialog";
 import { getFileContent, getLineBlame, saveFile, type FileContent, type LineBlame } from "@/api/files";
+import ContextMenu from "@/components/ContextMenu";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 import { t } from "@/i18n";
+import { fileReference } from "./reference";
 import "./FileViewer.scss";
 
 const sizeText = (bytes: number) =>
@@ -31,6 +33,7 @@ export default function FileViewer({
   onDirtyChange,
   onSaved,
   onDelete,
+  onSendToTerminal,
 }: {
   path: string;
   file: string | null;
@@ -40,6 +43,8 @@ export default function FileViewer({
   /** The file was written: everything that shows the working directory should reload. */
   onSaved: () => void;
   onDelete: (file: string) => void;
+  /** Type a file or line reference into the terminal (RepoView opens it). */
+  onSendToTerminal: (text: string) => void;
 }) {
   const [data, setData] = useState<{ file: string; content: FileContent } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -47,9 +52,12 @@ export default function FileViewer({
   // The text being edited (LF line endings), or null while just viewing.
   const [draft, setDraft] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  // The line with a blame hint beside it: the one clicked while viewing, the cursor's while editing (1-based).
-  const [pickedLine, setPickedLine] = useState<number | null>(null);
-  const [caretLine, setCaretLine] = useState(1);
+  // The lines picked while viewing (click, Shift+click extends; `focus` is the last one clicked), 1-based.
+  const [picked, setPicked] = useState<{ anchor: number; focus: number } | null>(null);
+  // The lines of the text area's selection, or just the cursor's line.
+  const [caret, setCaret] = useState({ from: 1, to: 1 });
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
   const [scroll, setScroll] = useState({ top: 0, left: 0 });
   const [blame, setBlame] = useState<{ key: string; value: LineBlame | null } | null>(null);
   const start = useLatestRequest();
@@ -64,7 +72,7 @@ export default function FileViewer({
 
   useEffect(() => {
     setDraft(null); // the parent only changes the file after the edits were given up
-    setPickedLine(null);
+    setPicked(null);
     if (file === null) {
       setData(null);
       setError(null);
@@ -105,7 +113,15 @@ export default function FileViewer({
   }, [dirty, onDirtyChange]);
 
   // While there are edits the line numbers no longer match what git knows, so the hint waits for the save.
-  const hintLine = editing ? (dirty ? null : caretLine) : pickedLine;
+  const hintLine = editing ? (dirty ? null : caret.to) : (picked?.focus ?? null);
+  // What a reference points at: the selected lines, if any. Unsaved edits have no line numbers git knows.
+  const range = editing ? caret : picked ? { from: Math.min(picked.anchor, picked.focus), to: Math.max(picked.anchor, picked.focus) } : null;
+  const reference = file === null ? "" : fileReference(file, range);
+  const referenceBlocked = dirty;
+  const sendReference = () => onSendToTerminal(reference);
+  const copyReference = () => navigator.clipboard?.writeText(reference).catch(() => {});
+  const lineAt = (e: React.MouseEvent<HTMLElement>) =>
+    Math.floor((e.clientY - e.currentTarget.getBoundingClientRect().top) / ROW_H) + 1;
   const hintText = editing ? draft : text;
   useEffect(() => {
     if (file === null || hintLine === null) return;
@@ -159,6 +175,22 @@ export default function FileViewer({
             {dirty && <span className="fv-meta">{t.files.unsaved}</span>}
             {content && !dirty && <span className="fv-meta">{sizeText(content.size)}</span>}
             <span className="fv-actions">
+              <button
+                className="secondary"
+                disabled={referenceBlocked}
+                onClick={sendReference}
+                title={referenceBlocked ? t.files.referenceDirty : t.files.sendHint(reference)}
+              >
+                {t.files.sendToTerminal}
+              </button>
+              <button
+                className="secondary"
+                disabled={referenceBlocked}
+                onClick={copyReference}
+                title={referenceBlocked ? t.files.referenceDirty : t.files.copyHint(reference)}
+              >
+                {t.files.copyReference}
+              </button>
               {editing ? (
                 <>
                   <button className="primary" disabled={saving || !dirty} onClick={save} title={t.files.saveHint}>
@@ -175,7 +207,7 @@ export default function FileViewer({
                   onClick={() => {
                     if (text === null) return;
                     setDraft(text.replace(/\r\n/g, "\n"));
-                    setCaretLine(1);
+                    setCaret({ from: 1, to: 1 });
                     setScroll({ top: 0, left: 0 });
                   }}
                   title={t.files.editHint}
@@ -203,10 +235,15 @@ export default function FileViewer({
                   aria-label={t.files.editing(file)}
                   onChange={(e) => setDraft(e.target.value)}
                   onScroll={(e) => setScroll({ top: e.currentTarget.scrollTop, left: e.currentTarget.scrollLeft })}
-                  // The cursor's line: the newlines before it.
+                  // The selected lines (or the cursor's): count the newlines before each end. A selection that ends
+                  // right after a newline doesn't include the next line.
                   onSelect={(e) => {
                     const el = e.currentTarget;
-                    setCaretLine(el.value.slice(0, el.selectionStart).split("\n").length);
+                    const lineOf = (i: number) => el.value.slice(0, i).split("\n").length;
+                    const from = lineOf(el.selectionStart);
+                    let to = lineOf(el.selectionEnd);
+                    if (to > from && el.value[el.selectionEnd - 1] === "\n") to -= 1;
+                    setCaret((c) => (c.from === from && c.to === to ? c : { from, to }));
                   }}
                   onKeyDown={(e) => {
                     if (e.key.toLowerCase() === "s" && (isMac ? e.metaKey : e.ctrlKey) && !e.altKey) {
@@ -229,11 +266,25 @@ export default function FileViewer({
             {!editing && text !== null && text !== "" && (
               <div
                 className="fv-code"
-                // Click a line (or its number) to pick it; clicking it again lets go.
+                // Click a line (or its number) to pick it, Shift+click to extend to another line; clicking the only
+                // picked line again lets go. Right-click picks the line under it unless it is already in the range.
                 onClick={(e) => {
-                  const top = e.currentTarget.getBoundingClientRect().top;
-                  const line = Math.floor((e.clientY - top) / ROW_H) + 1;
-                  if (line >= 1 && line <= lines) setPickedLine((p) => (p === line ? null : line));
+                  const line = lineAt(e);
+                  if (line < 1 || line > lines) return;
+                  setPicked((p) =>
+                    e.shiftKey && p
+                      ? { anchor: p.anchor, focus: line }
+                      : p && p.anchor === line && p.focus === line
+                        ? null
+                        : { anchor: line, focus: line },
+                  );
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  const line = lineAt(e);
+                  if (line < 1 || line > lines) return;
+                  if (!range || line < range.from || line > range.to) setPicked({ anchor: line, focus: line });
+                  setMenu({ x: e.clientX, y: e.clientY });
                 }}
               >
                 <pre className="fv-gutter" aria-hidden="true">
@@ -243,7 +294,10 @@ export default function FileViewer({
                   <pre className="fv-text">{text}</pre>
                   {hint && (
                     <>
-                      <span className="fv-band" style={{ top: hint.row * ROW_H }} />
+                      <span
+                        className="fv-band"
+                        style={{ top: ((range?.from ?? hint.row + 1) - 1) * ROW_H, height: ((range?.to ?? hint.row + 1) - (range?.from ?? hint.row + 1) + 1) * ROW_H }}
+                      />
                       <span className="fv-hint" style={{ top: hint.row * ROW_H, left: `calc(16px + ${hint.cols + 4}ch)` }}>
                         {hint.text}
                       </span>
@@ -254,6 +308,17 @@ export default function FileViewer({
             )}
           </div>
         </>
+      )}
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={closeMenu}
+          items={[
+            { label: t.files.sendToTerminal, title: t.files.sendHint(reference), onClick: sendReference },
+            { label: t.files.copyReference, title: t.files.copyHint(reference), onClick: copyReference },
+          ]}
+        />
       )}
     </section>
   );

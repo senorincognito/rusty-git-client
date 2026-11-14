@@ -52,6 +52,13 @@ export default function RepoView({
   // xterm is the biggest dependency, so its code is fetched on the first open. After that the panel stays mounted
   // (hidden) so the shell session survives closing it.
   const [terminalLoaded, setTerminalLoaded] = useState(false);
+  // Text for the shell's prompt (a file or line reference from the Files tab); a new id is a new request.
+  const [terminalPaste, setTerminalPaste] = useState<{ id: number; text: string } | null>(null);
+  const sendToTerminal = (text: string) => {
+    setTerminalLoaded(true);
+    setTerminalOpen(true);
+    setTerminalPaste((p) => ({ id: (p?.id ?? 0) + 1, text }));
+  };
   useEffect(() => {
     if (terminalOpen) setTerminalLoaded(true);
   }, [terminalOpen]);
@@ -559,6 +566,7 @@ export default function RepoView({
                   onDirtyChange={setViewerDirty}
                   onSaved={reload}
                   onDelete={removeFile}
+                  onSendToTerminal={sendToTerminal}
                 />
               </div>
               {history && !rebasing && (
@@ -723,7 +731,7 @@ export default function RepoView({
       )}
       {terminalLoaded && (
         <Suspense fallback={null}>
-          <TerminalPanel path={path} open={terminalOpen} onClose={() => setTerminalOpen(false)} />
+          <TerminalPanel path={path} open={terminalOpen} onClose={() => setTerminalOpen(false)} paste={terminalPaste} />
         </Suspense>
       )}
     </div>

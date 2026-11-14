@@ -78,8 +78,7 @@
   position: absolute;
   left: 0;
   right: 0;
-  height: 20px;
-  background: $press-tint;
+  background: $press-tint; // the height is set inline: one row per picked line
   pointer-events: none;
 }
 
