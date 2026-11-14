@@ -1,6 +1,7 @@
 mod auth;
 mod changes;
 mod commit;
+mod files;
 mod graph;
 mod history;
 mod repo;
@@ -30,6 +31,12 @@ pub fn run() {
             undo::undo_cmd,
             undo::redo_cmd,
             commit::file_history::get_file_history,
+            files::create_file_cmd,
+            files::delete_file_cmd,
+            files::save_file_cmd,
+            files::blame::get_line_blame,
+            files::get_files,
+            files::get_file_content,
             graph::fast_forward::fast_forward_cmd,
             graph::merge::merge_branch_cmd,
             graph::pick::cherry_pick_cmd,

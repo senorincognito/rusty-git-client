@@ -6,6 +6,10 @@
   position: relative;
   display: flex;
   max-width: 40vw; // two panels can never squeeze the graph out
+
+  &[hidden] {
+    display: none;
+  }
 }
 
 .resize-handle {

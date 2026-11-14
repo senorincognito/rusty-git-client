@@ -10,7 +10,7 @@
   border-right: 1px solid $border;
 }
 
-// The tabs at the top: Branches, Stashes, Tags.
+// The tabs at the top: Branches, Stashes, Tags, Files.
 .sidetabs {
   flex: none;
   display: flex;
@@ -156,7 +156,8 @@
   color: $muted;
 }
 
-.taglist li {
+.taglist li,
+.filelist-tree li {
   &.selected {
     background: $accent-tint;
   }
@@ -171,6 +172,30 @@
 
 .tag-id {
   font-family: $font-mono;
+}
+
+// Files with uncommitted changes, and the folders that hold them.
+.filelist-tree li {
+  &.changed {
+    font-weight: 600;
+  }
+
+  &.ch-new {
+    color: $added;
+  }
+
+  &.ch-modified,
+  &.ch-typechange {
+    color: $warn;
+  }
+
+  &.ch-conflicted {
+    color: $danger;
+  }
+
+  &.folder.changed {
+    color: $warn;
+  }
 }
 
 .stashlist li {

@@ -1,6 +1,6 @@
 # Branches and remotes (left panel)
 
-- The left panel has three **tabs**: *Branches* (Local branches and Remotes), *Stashes* and *Tags*. The chosen tab is remembered, the filter field above the
+- The left panel has four **tabs**: *Branches* (Local branches and Remotes), *Stashes*, *Tags* and *Files* (see [Files](files.md)). The chosen tab is remembered, the filter field above the
   lists applies to whichever tab is open, and Left/Right arrows move between the tabs when one has the focus.
 - **Tags** tab: every tag of the repository, newest first, with its short commit id and an *annotated* marker (the tooltip shows the annotation and date).
   Click a tag to show its commit in the right panel; right-click for *Show commit*, *Copy tag name* or *Delete tag…* (asks first; only the local tag goes).

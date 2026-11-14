@@ -19,6 +19,8 @@ export default function FileHistory({
   openId,
   onOpen,
   onClose,
+  backLabel = t.fileHistory.back,
+  backHint = t.fileHistory.backHint,
 }: {
   path: string;
   file: string;
@@ -31,6 +33,9 @@ export default function FileHistory({
   openId: string | null;
   onOpen: (entry: HistoryEntry) => void;
   onClose: () => void;
+  /** Where Back leads, when it is not the graph. */
+  backLabel?: string;
+  backHint?: string;
 }) {
   const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -62,8 +67,8 @@ export default function FileHistory({
   return (
     <section className="filehistory">
       <header className="fh-head">
-        <button className="ghost" onClick={onClose} title={t.fileHistory.backHint}>
-          {t.fileHistory.back}
+        <button className="ghost" onClick={onClose} title={backHint}>
+          {backLabel}
         </button>
         <span className="fh-title">{from ? t.fileHistory.titleFrom(from.shortId) : t.fileHistory.title}</span>
         <span className="fh-path" title={file}>

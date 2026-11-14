@@ -8,8 +8,10 @@ import { countUnmergedRemoteCommits, deleteRemoteBranch } from "@/api/remotes";
 import { deleteTag, type RefLabel } from "@/api/graph";
 import { applyStash, dropStash, popStash } from "@/api/stash";
 import { cherryPick, dropLatestCommit, fastForward, getDropInfo, getRebaseOntoInfo, getResetInfo, mergeBranch, rebaseOnto, resetToCommit, revertCommit, type ResetMode } from "@/api/history";
+import { deleteFile } from "@/api/files";
 import { openRepo, type RepoInfo } from "@/api/repo";
 import { unwatchRepo, watchRepo } from "@/api/watch";
+import { usePersistentState } from "@/hooks/usePersistentState";
 import { useWorkingChangeCount } from "@/hooks/useWorkingChangeCount";
 import BusyBar from "@/components/BusyBar";
 import ResizablePanel from "@/components/ResizablePanel";
@@ -23,7 +25,9 @@ import Graph from "@/features/graph/Graph";
 import TagDialog from "@/features/graph/TagDialog";
 import InteractiveRebase from "@/features/rebase/InteractiveRebase";
 import RenameCommit from "@/features/rename/RenameCommit";
-import Sidebar from "@/features/sidebar/Sidebar";
+import FileViewer from "@/features/files/FileViewer";
+import NewFileDialog from "@/features/files/NewFileDialog";
+import Sidebar, { isSidebarTab, type SidebarTab } from "@/features/sidebar/Sidebar";
 import BranchButton from "@/features/toolbar/BranchButton";
 import SyncBar from "@/features/toolbar/SyncBar";
 import UndoButtons from "@/features/toolbar/UndoButtons";
@@ -77,6 +81,43 @@ export default function RepoView({
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchFocus, setSearchFocus] = useState(0);
   const path = repo.path;
+  // The left panel's tab. The Files tab takes over the screen: the centre shows a file and the right panel is hidden.
+  const [tab, setTab] = usePersistentState<SidebarTab>("sidebarTab", "branches", isSidebarTab);
+  const [viewedFile, setViewedFile] = useState<string | null>(null);
+  // The viewer has unsaved edits: another file may only replace it after they are given up.
+  const [viewerDirty, setViewerDirty] = useState(false);
+  const [newFileIn, setNewFileIn] = useState<string | null>(null);
+  const viewFile = async (file: string | null) => {
+    if (file === viewedFile) return;
+    if (viewerDirty && viewedFile !== null) {
+      if (!(await confirmDialog(t.files.discardConfirm(viewedFile), t.files.discardTitle, true, t.files.discard))) return;
+    }
+    setViewedFile(file);
+  };
+  // Delete from the Files tab (list or viewer): the file goes from the working directory, not through git.
+  const removeFile = async (file: string) => {
+    try {
+      if (!(await confirmDialog(t.files.deleteConfirm(file), t.files.deleteTitle, true))) return;
+      await deleteFile(path, file);
+      if (file === viewedFile) setViewedFile(null);
+      if (history?.file === file) setHistory(null);
+      reload();
+    } catch (e) {
+      await showError(String(e), t.files.deleteTitle);
+    }
+  };
+  const filesMode = tab === "files" && !rebasing;
+  const changeTab = (next: SidebarTab) => {
+    setHistory(null); // a file's history belongs to the tab it was opened from
+    if (next === "files") {
+      // The diffs and the file history cover the graph, which the Files tab hides; they would keep their key handlers.
+      setOpenFile(null);
+      setOpenWorkingFile(null);
+      setResolving(null);
+      setHistory(null);
+    }
+    setTab(next);
+  };
   // The branch chip in the title bar copies the name on click; its tooltip confirms until the pointer leaves.
   const [branchCopied, setBranchCopied] = useState(false);
   const branchLabel = (repo.detached ? t.repo.detached : "") + (repo.head ?? t.repo.noCommits);
@@ -310,9 +351,10 @@ export default function RepoView({
     setOpenWorkingFile(null);
     setResolving(null);
     setHistory(null);
+    if (tab === "files") setTab("branches"); // the search works on the graph, which the Files tab hides
     setSearchOpen(true);
     setSearchFocus((k) => k + 1);
-  }, [rebasing]);
+  }, [rebasing, tab, setTab]);
   const closeSearch = useCallback(() => setSearchOpen(false), []);
 
   // Ctrl+F (Cmd+F on macOS) opens the search, also from text fields; the terminal keeps the key for the shell.
@@ -401,6 +443,15 @@ export default function RepoView({
           <div className={"workarea-content" + (rebasing ? " covered" : "")} inert={rebasing !== null}>
             <Sidebar
               path={path}
+              tab={tab}
+              onTabChange={changeTab}
+              openFile={viewedFile}
+              onOpenFile={viewFile}
+              onNewFile={setNewFileIn}
+              onDeleteFile={removeFile}
+              onFileHistory={(file) => {
+                setHistory({ file, from: null, entry: null });
+              }}
               refreshKey={graphKey}
               onChanged={reload}
               onCheckout={checkoutRef}
@@ -428,13 +479,15 @@ export default function RepoView({
             />
             <div className="center">
               <BusyBar path={path} panel="graph" />
+              {/* Everything of the other tabs stays mounted (just hidden) while the Files tab shows a file. */}
+              <div className={"center-pane" + (filesMode ? " hidden" : "")}>
               {/* The graph stays mounted (just hidden) while a file is open, so its scroll position survives. */}
               <div className={"center-pane" + (openFile || openWorkingFile || resolving || history ? " hidden" : "")}>
                 <Graph
                   path={path}
                   refreshKey={graphKey}
                   selectedId={selectedCommit?.id ?? null}
-                  keyboard={!rebasing && !openFile && !openWorkingFile && !resolving && !renaming && !history}
+                  keyboard={!rebasing && !filesMode && !openFile && !openWorkingFile && !resolving && !renaming && !history}
                   onSelectCommit={selectCommit}
                   onSelectWip={() => {
                     closeCommit(); // back to the working-directory changes in the right panel
@@ -466,30 +519,6 @@ export default function RepoView({
                   onCloseSearch={closeSearch}
                 />
               </div>
-              {history && !rebasing && (
-                <div className={"center-pane" + (history.entry ? " hidden" : "")}>
-                  <FileHistory
-                    path={path}
-                    file={history.file}
-                    from={history.from}
-                    refreshKey={graphKey}
-                    active={history.entry === null && !openFile && !openWorkingFile && !resolving}
-                    openId={history.entry?.id ?? null}
-                    onOpen={(entry) => setHistory({ ...history, entry })}
-                    onClose={() => setHistory(null)}
-                  />
-                </div>
-              )}
-              {history?.entry && !rebasing && (
-                <FileDiff
-                  path={path}
-                  source={{ kind: "commit", id: history.entry.id, shortId: history.entry.shortId }}
-                  file={{ path: history.entry.path, oldPath: history.entry.oldPath, status: history.entry.status }}
-                  backLabel={t.fileHistory.backToList}
-                  backHint={t.fileHistory.backToListHint}
-                  onClose={() => setHistory({ ...history, entry: null })}
-                />
-              )}
               {openFile && selectedCommit && !rebasing && (
                 <FileDiff
                   path={path}
@@ -518,6 +547,44 @@ export default function RepoView({
                   refreshKey={graphKey}
                   onChanged={reload} // a staged or discarded hunk changes the staging lists and the graph
                   onClose={() => setOpenWorkingFile(null)}
+                />
+              )}
+              </div>
+              {/* Always mounted, so edits in progress survive a visit to another tab. */}
+              <div className={"center-pane" + (!filesMode || history ? " hidden" : "")}>
+                <FileViewer
+                  path={path}
+                  file={viewedFile}
+                  refreshKey={graphKey}
+                  onDirtyChange={setViewerDirty}
+                  onSaved={reload}
+                  onDelete={removeFile}
+                />
+              </div>
+              {history && !rebasing && (
+                <div className={"center-pane" + (history.entry ? " hidden" : "")}>
+                  <FileHistory
+                    path={path}
+                    file={history.file}
+                    from={history.from}
+                    refreshKey={graphKey}
+                    active={history.entry === null && !openFile && !openWorkingFile && !resolving}
+                    openId={history.entry?.id ?? null}
+                    onOpen={(entry) => setHistory({ ...history, entry })}
+                    onClose={() => setHistory(null)}
+                    backLabel={filesMode ? t.fileHistory.backToFiles : undefined}
+                    backHint={filesMode ? t.fileHistory.backToFilesHint : undefined}
+                  />
+                </div>
+              )}
+              {history?.entry && !rebasing && (
+                <FileDiff
+                  path={path}
+                  source={{ kind: "commit", id: history.entry.id, shortId: history.entry.shortId }}
+                  file={{ path: history.entry.path, oldPath: history.entry.oldPath, status: history.entry.status }}
+                  backLabel={t.fileHistory.backToList}
+                  backHint={t.fileHistory.backToListHint}
+                  onClose={() => setHistory({ ...history, entry: null })}
                 />
               )}
             </div>
@@ -549,7 +616,8 @@ export default function RepoView({
             </div>
           )}
         </div>
-        <ResizablePanel edge="left" storageKey="changesWidth" defaultWidth={340} min={260}>
+        {/* Stays mounted while hidden, so a half-typed commit message survives a visit to the Files tab. */}
+        <ResizablePanel edge="left" storageKey="changesWidth" defaultWidth={340} min={260} hidden={filesMode}>
           <BusyBar path={path} panel="right" />
           {renaming && (
             <RenameCommit
@@ -626,6 +694,18 @@ export default function RepoView({
           onStashed={() => {
             setStashOpen(false);
             setOpenWorkingFile(null); // what was stashed no longer has a working diff
+            reload();
+          }}
+        />
+      )}
+      {newFileIn !== null && (
+        <NewFileDialog
+          path={path}
+          folder={newFileIn}
+          onClose={() => setNewFileIn(null)}
+          onCreated={(file) => {
+            setNewFileIn(null);
+            viewFile(file); // an unsaved edit in the viewer gets the same question as any other switch
             reload();
           }}
         />

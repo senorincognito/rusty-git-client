@@ -2,20 +2,27 @@ import { useState } from "react";
 import type { RefLabel } from "@/api/graph";
 import BusyBar from "@/components/BusyBar";
 import ResizablePanel from "@/components/ResizablePanel";
-import { usePersistentState } from "@/hooks/usePersistentState";
 import { t } from "@/i18n";
+import Files from "./Files";
 import LocalBranches from "./LocalBranches";
 import Remotes from "./Remotes";
 import Stashes from "./Stashes";
 import Tags from "./Tags";
 import "./Sidebar.scss";
 
-const TABS = ["branches", "stashes", "tags"] as const;
-type Tab = (typeof TABS)[number];
-const isTab = (v: unknown): v is Tab => TABS.includes(v as Tab);
+const TABS = ["branches", "stashes", "tags", "files"] as const;
+export type SidebarTab = (typeof TABS)[number];
+export const isSidebarTab = (v: unknown): v is SidebarTab => TABS.includes(v as SidebarTab);
 
 export default function Sidebar({
   path,
+  tab,
+  onTabChange,
+  openFile,
+  onOpenFile,
+  onFileHistory,
+  onNewFile,
+  onDeleteFile,
   refreshKey,
   onChanged,
   onCheckout,
@@ -33,6 +40,18 @@ export default function Sidebar({
   onDeleteTag,
 }: {
   path: string;
+  /** The open tab; RepoView owns it because the Files tab changes the rest of the screen. */
+  tab: SidebarTab;
+  onTabChange: (tab: SidebarTab) => void;
+  /** The file shown in the centre by the Files tab. */
+  openFile: string | null;
+  onOpenFile: (file: string) => void;
+  /** Show the commits that changed a file of the Files tab. */
+  onFileHistory: (file: string) => void;
+  /** Ask for a new file's name (RepoView shows the dialog); `folder` pre-fills it. */
+  onNewFile: (folder: string) => void;
+  /** Delete a file of the Files tab (RepoView asks first). */
+  onDeleteFile: (file: string) => void;
   refreshKey: number;
   onChanged: () => void;
   /** Switch to a local branch, or to a remote one (which becomes a local branch). Owned by RepoView, which also runs the other entry points. */
@@ -63,11 +82,12 @@ export default function Sidebar({
 }) {
   // One filter for every list below: local branches, remote branches, stashes and tags.
   const [filter, setFilter] = useState("");
-  const [tab, setTab] = usePersistentState<Tab>("sidebarTab", "branches", isTab);
-  const tabNames: Record<Tab, string> = {
+  const setTab = onTabChange;
+  const tabNames: Record<SidebarTab, string> = {
     branches: t.sidebar.tabBranches,
     stashes: t.sidebar.tabStashes,
     tags: t.sidebar.tabTags,
+    files: t.sidebar.tabFiles,
   };
   return (
     <ResizablePanel edge="right" storageKey="sidebarWidth" defaultWidth={240}>
@@ -138,6 +158,9 @@ export default function Sidebar({
         </div>
         <div className="sidepane" id="sidepane-tags" role="tabpanel" aria-labelledby="sidetab-tags" hidden={tab !== "tags"}>
           <Tags path={path} refreshKey={refreshKey} selectedId={selectedId} onSelect={onSelectCommit} onDelete={onDeleteTag} filter={filter} />
+        </div>
+        <div className="sidepane" id="sidepane-files" role="tabpanel" aria-labelledby="sidetab-files" hidden={tab !== "files"}>
+          <Files path={path} refreshKey={refreshKey} selected={openFile} onSelect={onOpenFile} onHistory={onFileHistory} onNewFile={onNewFile} onDelete={onDeleteFile} filter={filter} />
         </div>
       </nav>
       <BusyBar path={path} panel="sidebar" />

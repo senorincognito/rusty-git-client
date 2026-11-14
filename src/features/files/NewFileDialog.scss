@@ -1,0 +1,15 @@
+@use "@/styles/core" as *;
+
+.newfile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+
+  p {
+    margin: 0;
+  }
+
+  input {
+    @include text-field;
+  }
+}

@@ -33,6 +33,7 @@ export default function ResizablePanel({
   defaultWidth,
   min = 180,
   max = 640,
+  hidden = false,
   children,
 }: {
   edge: "left" | "right";
@@ -40,6 +41,8 @@ export default function ResizablePanel({
   defaultWidth: number;
   min?: number;
   max?: number;
+  /** Not shown, but still mounted, so what it holds (a half-typed message) survives. */
+  hidden?: boolean;
   children: ReactNode;
 }) {
   const [width, setWidth] = useState(() => load(storageKey, defaultWidth, min, max));
@@ -80,7 +83,7 @@ export default function ResizablePanel({
   };
 
   return (
-    <div className="resizable" style={{ width, minWidth: min }}>
+    <div className="resizable" style={{ width, minWidth: min }} hidden={hidden}>
       {children}
       <div
         className={`resize-handle edge-${edge}`}

@@ -11,6 +11,7 @@ const READS: Record<string, Panel> = {
   get_remotes: "sidebar",
   get_stashes: "sidebar",
   get_tags: "sidebar",
+  get_files: "sidebar",
   get_status: "right",
   get_head_commit: "right",
   get_commit_detail: "right",

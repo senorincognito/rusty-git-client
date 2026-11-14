@@ -11,13 +11,15 @@ type Node<T> = { folders: Map<string, Node<T>>; leaves: { item: T; label: string
 /**
  * Flattens names into rows: folders first, then branches, each in the order given. A closed folder hides its
  * contents; `openAll` (an active filter) shows everything. `keyPrefix` keeps folders of different lists apart.
+ * `toggled` holds the folders the user flipped from their default: closed ones, or with `defaultOpen` false, open ones.
  */
 export function buildRows<T>(
   items: T[],
   nameOf: (item: T) => string,
-  closed: Set<string>,
+  toggled: Set<string>,
   openAll: boolean,
   keyPrefix = "",
+  defaultOpen = true,
 ): TreeRow<T>[] {
   const root: Node<T> = { folders: new Map(), leaves: [], count: 0 };
   for (const item of items) {
@@ -35,7 +37,7 @@ export function buildRows<T>(
   const walk = (node: Node<T>, path: string, depth: number) => {
     for (const [name, child] of node.folders) {
       const key = keyPrefix + path + name;
-      const open = openAll || !closed.has(key);
+      const open = openAll || toggled.has(key) !== defaultOpen;
       rows.push({ kind: "folder", key, label: name, depth, count: child.count, open });
       if (open) walk(child, path + name + "/", depth + 1);
     }
@@ -64,22 +66,30 @@ export function useClosedFolders() {
 export function FolderRow({
   row,
   onToggle,
+  countLabel = t.localBranches.folderCount,
+  className,
+  onContextMenu,
 }: {
   row: Extract<TreeRow<unknown>, { kind: "folder" }>;
   onToggle: (key: string) => void;
+  /** Words for the count badge's aria-label. */
+  countLabel?: (n: number) => string;
+  className?: string;
+  onContextMenu?: (e: React.MouseEvent) => void;
 }) {
   return (
     <li
-      className="folder"
+      className={className ? `folder ${className}` : "folder"}
       style={{ paddingLeft: 12 + row.depth * 14 }}
       title={row.label}
       role="treeitem"
       aria-expanded={row.open}
       onClick={() => onToggle(row.key)}
+      onContextMenu={onContextMenu}
     >
       <span className="chev">{row.open ? "▾" : "▸"}</span>
       <span className="bname">{row.label}</span>
-      <span className="sync" aria-label={t.localBranches.folderCount(row.count)}>
+      <span className="sync" aria-label={countLabel(row.count)}>
         {row.count}
       </span>
     </li>

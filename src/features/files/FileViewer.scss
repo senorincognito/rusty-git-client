@@ -1,0 +1,137 @@
+@use "@/styles/core" as *;
+
+.fileviewer {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: $bg;
+}
+
+.fv-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  background: $panel;
+  border-bottom: 1px solid $border;
+}
+
+.fv-path {
+  min-width: 0;
+  @include truncate;
+  font-weight: 600;
+}
+
+.fv-meta {
+  flex: none;
+  margin-left: auto;
+  font-size: 12px;
+  color: $muted;
+}
+
+.fv-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+// Line numbers and text scroll together; the numbers stay in view when scrolling sideways.
+.fv-code {
+  display: flex;
+  min-width: max-content;
+  font-family: $font-mono;
+  font-size: 12px;
+  line-height: 20px;
+
+  pre {
+    margin: 0;
+    font: inherit;
+  }
+}
+
+.fv-gutter {
+  position: sticky;
+  left: 0;
+  flex: none;
+  padding: 0 10px;
+  text-align: right;
+  color: $muted;
+  background: $panel;
+  user-select: none;
+}
+
+.fv-textcol {
+  position: relative;
+  flex: 1;
+}
+
+.fv-text {
+  padding: 0 16px;
+  tab-size: 4;
+}
+
+// The picked line, and the blame text after its end (it scrolls with the text).
+.fv-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 20px;
+  background: $press-tint;
+  pointer-events: none;
+}
+
+.fv-hint {
+  position: absolute;
+  height: 20px;
+  line-height: 20px;
+  font-family: $font-mono;
+  font-size: 12px;
+  font-style: italic;
+  color: $muted;
+  white-space: pre;
+  pointer-events: none;
+  user-select: none;
+}
+
+.fv-editwrap {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+}
+
+.fv-actions {
+  flex: none;
+  display: flex;
+  gap: 6px;
+}
+
+// The meta text pushes the buttons right; without it the buttons take over that job.
+.fv-meta + .fv-actions {
+  margin-left: 0;
+}
+
+.fv-path + .fv-actions {
+  margin-left: auto;
+}
+
+.fv-editor {
+  display: block;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0 16px;
+  resize: none;
+  border: 0;
+  outline: 0;
+  background: $bg;
+  color: $text;
+  font-family: $font-mono;
+  font-size: 12px;
+  line-height: 20px;
+  tab-size: 4;
+  white-space: pre;
+  overflow: auto;
+}
