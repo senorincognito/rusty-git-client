@@ -7,8 +7,8 @@ and building; this file is for contributors.
 
 **Keep this file current.** The author has given standing permission to update it without asking: when work
 adds a module or a rule, settles a product decision, or uncovers a quirk (library, git, Windows, tooling),
-record it here in the right section, briefly and with the *why*. Edit existing entries rather than
-duplicating them, and move finished items off "Not implemented yet".
+record it in the right place, briefly and with the *why*: rules and quirks here, a feature's decisions and implementation details in its file under
+`docs/design/` (see "Design notes"). Edit existing entries rather than duplicating them, and move finished items off the "Not yet implemented" list in `FEATURES.md`.
 
 ## Commands
 
@@ -63,7 +63,7 @@ the module path to be visible from the crate root.
 | `history/test_support.rs` | tests only | small repositories with real commits for the history tests |
 | `changes/mod.rs` | `features/changes` | status, stage/unstage, `discard_paths` (whole-file discard), `create_commit` (new or `amend`), `get_head_commit`. `commit_staged`/`amend_head` validate with git2, then `git_commit` runs system `git commit -F <tempfile> [--amend]` so hooks, signing and templates apply (libgit2's `commit()` never runs hooks). The history rewrites (rename, drop, interactive rebase) still build commits with libgit2 and so skip hooks, `post-rewrite` included |
 | `changes/conflicts.rs` | `features/conflicts`, `features/changes` | merge conflicts left in place: `get_merge_state`, `get_conflict` (working file parsed into text/conflict segments, `parse_markers`), `resolve_conflict_side_cmd` (system git `checkout --ours/--theirs` + `add`, or `rm`), `save_resolution_cmd`, `abort_merge_cmd`; `stage` refuses a conflicted file that still has markers |
-| `changes/hunks.rs` | diff view | `stage_hunk`, `discard_hunk`, `unstage_hunk`: apply one hunk of a file's staged/unstaged changes (see Product decisions) |
+| `changes/hunks.rs` | diff view | `stage_hunk`, `discard_hunk`, `unstage_hunk`: apply one hunk of a file's staged/unstaged changes (see `docs/design/changes-and-diffs.md`) |
 | `commit/file_history.rs` | `features/commit/FileHistory` | `get_file_history`: `git log --follow --name-status` for one file (≤ 500 commits), parsed into id/author/time/status/path-at-that-commit/oldPath |
 | `commit/mod.rs` | `features/commit` | all diff rendering: `get_commit_detail` (files of a commit, renames), `get_file_diff` (a commit's file), `get_working_diff` (staged/unstaged file); shared `diff_options` + `render_diff` |
 | `files/mod.rs` | `features/sidebar/Files`, `features/files/FileViewer` | `get_files` (`git ls-files -z --cached --others --exclude-standard`, so tracked plus untracked-not-ignored; entries missing on disk and directories such as submodules dropped, sorted), `create_file_cmd` / `save_file_cmd` / `delete_file_cmd` (plain `std::fs`, outside the undo journal; `relative()` refuses `..`, absolute paths and anything under `.git`; a write checks the nearest existing ancestor is inside the repo *before* `create_dir_all`, so a symlinked folder can't lead out; delete refuses folders), `files/blame.rs` `get_line_blame` (`git blame --porcelain -L n,n` on the file as it is on disk; `None` for uncommitted lines, untracked files and lines past the end), `get_file_content` (working-directory file as `text`/`binary` (NUL in the first 8000 bytes)/`tooLarge` (> 2 MB); the path must be relative and `canonicalize`d inside the repo, so `..` and symlinks out are refused) |
@@ -125,9 +125,6 @@ app data dir and `localStorage` are not migrated, so saved settings and the rece
 - **Activity bars**: every API wrapper imports `invoke` from `api/invoke.ts`, which records the commands in flight per repo `path`. `BusyBar` (sidebar, centre `.center`, right panel) shows a 2px moving bar while `usePanelBusy(path, panel)` is true: a read the panel displays (`READS` map: `get_graph`, `get_status`, ...) or any *change* (every other command with a `path`; `QUIET` lists background/own-indicator ones such as auto-fetch, diffs, search). Shown after 200 ms, held 300 ms, so quick work doesn't flash and the gap between a change and its reload doesn't blink. A new command that only reads must start with `get_`/`count_`/`scan_` (else it counts as a change); a new panel read goes into `READS`. The lock overlays (`switchingTo`, `changes-lock`) remain for actions that must block input.
 - **Async UI requests** must ignore out-of-order responses: use `useLatestRequest`
   (`const isCurrent = start(); ...; if (isCurrent()) set(...)`).
-- **Clean up merged** (`sidebar/cleanup.rs`; item in the "⋯" menus of Local branches and Remotes): merged = the tip is a *strict* ancestor of a main tip (`graph_descendant_of(base, tip)`), so branches sitting exactly on main are excluded on purpose (new branches). Main = local `main`/`master`; per remote `<remote>/HEAD`'s target, else `main`/`master`. Local candidates are checked against the local main *and* every remote main; remote candidates only against their own remote's main (that is what the server has). Never offered: the checked-out branch, `PROTECTED` names (main, master, develop, dev, trunk) and the base's own name, and a remote branch that is the checked-out branch's upstream. The UI asks the backend for the list, shows it in a confirmation, and the delete commands recompute the list and only delete the intersection. Remote deletion runs one `push --delete` per remote with the system git and is outside the undo journal; the confirmation says so.
-- **Delete synced branches** (Local branches "⋯" menu, `delete_synced_branches`): "synced" = has an upstream and the local tip equals the upstream tip (`ahead == 0 && behind == 0` in `BranchInfo`, so relative to the last fetch), never the checked-out branch. The UI lists them in the confirmation; the backend re-checks each name before deleting and silently skips any that no longer qualify. One undo step (`Kind::Keep`).
-- **Files tab** (4th sidebar tab; `RepoView` owns `tab` (`localStorage` `sidebarTab`) and `viewedFile`, because the tab changes the whole screen): while it is active (`filesMode`, not during a rebase) the centre shows `FileViewer` and the right panel is `hidden` via `ResizablePanel`'s `hidden` prop (still mounted, so `Changes` keeps a half-typed commit message). The graph and its overlays sit in a nested `.center-pane.hidden`; switching to Files first closes any open diff / conflict view / file history (their window-level key handlers would otherwise fire unseen) and `openSearch` switches back to Branches. The tree reuses `branchTree.buildRows` with `defaultOpen = false` (folders start closed; the set then holds the *opened* ones; everything is open while filtering). Not watched: the list and the viewer refetch on `graphKey` and window focus. Files with uncommitted changes are coloured by kind (`ch-new/modified/typechange/conflicted`, from `getStatus`) and their parent folders tinted. Right-click a file > *Show git history* reuses `RepoView.history` / `FileHistory` / `FileDiff` unchanged: those blocks are *outside* the hidden wrapper so they also show in files mode (the viewer's pane hides while `history` is set; Back reads "Back to files"); any tab change clears `history`. **Editing**: `FileViewer` swaps its numbered `<pre>` for a plain `<textarea>` (*Edit*, Save / Ctrl+Cmd+S, Cancel; text files only; CRLF files stay CRLF since textarea values read back LF). It stays mounted (hidden outside files mode) so a draft survives tab switches; it reports `dirty` to `RepoView`, whose `viewFile` asks before another file replaces unsaved edits. *New file…* (section "⋯" menu, or a folder's right-click) opens `NewFileDialog` (relative path, folders created, existing name refused, created empty); *Delete file* (file right-click or viewer button) confirms first. None of it goes through git or the undo journal; the working directory isn't watched, so each action calls `reload()`. **Blame hint**: clicking a line (or its number) in the viewer picks it (click again to let go); in the editor the cursor's line counts, and only while there are no unsaved edits (line numbers then still match what git knows). `FileViewer` asks `get_line_blame` (120 ms debounce) and draws `sha · author · message` as an absolutely positioned italic span after the line's end: `left = 16px + (columns + 4)ch` with tabs expanded to 4, so it relies on the fixed 20 px row height and the monospace font (`ROW_H`, `TAB` in the component); in the editor it is offset by the textarea's scroll. The hint's SHA has two small buttons (their `pointer-events: auto` pokes through the hint's `none`; they `stopPropagation` so the click doesn't pick/unpick the line, and `preventDefault` on mousedown keeps the editor's focus): copy the full id, and *show in graph* (`RepoView.showCommit`: `changeTab("branches")`, `selectCommit`, then `searchCommits(path, id)` to get the commit's row index, which goes to `Graph` as `revealRequest` `{n, hit}`; the graph's existing `reveal` effect loads that far and centres it). **References for an AI harness in the terminal**: Shift+click extends the picked line to a range (editor: the text selection's lines, via `onSelect`); *Send to terminal* / *Copy reference* (header buttons and the viewer's right-click menu) build `@path`, `@path#L12` or `@path#L12-20` with `reference.ts` `fileReference` (the one place to change the format; paths with spaces are not quoted). Both are disabled while there are unsaved edits (line numbers wouldn't match). `RepoView.sendToTerminal` opens the terminal and sets `terminalPaste` `{id, text}`, a prop of `TerminalPanel`: it queues the text until the shell runs (`sessionReady`, set after `termStart`), restarts an exited shell, then calls xterm's `paste()` (bracketed when the program asked for it, never presses Enter) and focuses. No shortcut yet. No syntax highlighting; untested in the running app.
 - **Sidebar section headlines** can carry a "⋯" menu (`Section`'s `action` prop): Local branches (*New branch…*, which shows
   the same `NewBranchForm` the toolbar's Branch button uses, inline) and Remotes. Keep branch creation in that one form.
 - **Sidebar layout**: three tabs (`Sidebar`: Branches = Local + Remotes, Stashes, Tags; the choice is `localStorage` `sidebarTab`). Every tab's `.sidepane` stays mounted and is just `hidden`, so lists keep their data and scroll. `.sidebar` itself does not scroll; inside a pane each open `Section` is a shrinkable flex item (min height 96px) whose
@@ -157,12 +154,11 @@ app data dir and `localStorage` are not migrated, so saved settings and the rece
 - **Keyboard**: a global (window-level) `Escape` handler must ignore events from editable targets
   (`input`/`textarea`/`select`/contenteditable; xterm's hidden textarea counts) and must do nothing while a
   `.ctxmenu` or `.modal-backdrop` is open, because those handle their own Escape. `FileDiff` is the model.
-  Existing shortcuts: Esc (close diff / menus / dialogs / editors), Ctrl+\` terminal (`RepoView`),
-  Ctrl+F / Cmd+F search (`RepoView`; works in text fields, skipped inside `.xterm`, menus and dialogs; its `preventDefault` also keeps WebView2's own find bar away),
-  Ctrl/Cmd+Enter commit and rename-update, Ctrl/Cmd+Z / +Shift+Z (Ctrl+Y) undo / redo (`UndoButtons`, skips editable targets, menus, dialogs), arrow keys on resize handles, ↑/↓ in the commit graph (`Graph`, `keyboard` prop: off while a diff, the rename panel or the
-  rebase screen covers it) and through the right panel's files while a diff is open (`CommitDetail`, `Changes`), all via
-  the `useArrowKeys` hook (plain arrows only; skips fields, menus and dialogs), ↑/↓ (and Ctrl/Cmd+↑/↓ to move) in the
-  interactive rebase (`InteractiveRebase`, window-level; skips editable targets, menus, popups and `diffOpen`). Keep the shortcuts table in `FEATURES.md` in sync.
+  The list of shortcuts lives only in the table in `FEATURES.md`: keep it in sync. Implementation notes: Ctrl/Cmd+F (`RepoView`) works in text fields, is skipped inside
+  `.xterm`, menus and dialogs, and its `preventDefault` keeps WebView2's own find bar away; Ctrl/Cmd+Z (`UndoButtons`) skips editable targets, menus, dialogs; ↑/↓ in the
+  commit graph (`Graph`, `keyboard` prop: off while a diff, the rename panel or the rebase screen covers it) and through the right panel's files while a diff is open
+  (`CommitDetail`, `Changes`) go through the `useArrowKeys` hook (plain arrows only; skips fields, menus and dialogs); the interactive rebase's keys (`InteractiveRebase`)
+  are window-level and skip editable targets, menus, popups and `diffOpen`.
 - **Texts** live in `src/i18n/en.ts`, never inline in components: labels, titles/tooltips, aria-labels, placeholders,
   confirmation texts, notices. Use `t.<section>.<key>` (strings), functions for texts with values (`t.sync.pushTo(upstream)`,
   pluralise with the local `plural` helper), and `fill(template, { name: <strong>…</strong> })` for sentences containing markup.
@@ -171,168 +167,20 @@ app data dir and `localStorage` are not migrated, so saved settings and the rece
   they come and are not in the file. In `TerminalPanel` the import is `t as text`, because `t` is the xterm instance there.
 - Match the surrounding comment density: short comments that explain *why*, none restating the code.
 
-## Product decisions already made (keep consistent)
+## Design notes (`docs/design/`)
 
-- **Start screen** (`features/welcome/Welcome`): two panels (CSS grid; stacked under 800px): Recent on the left; on the right the repositories found in one remembered folder (`repo_folder.json`), filtered with `matchesFilter` from the sidebar, opened with the same `openRepo` (so they also become recent). One folder only; several are a possible extension. Not live: a rescan (↻) or reopening the screen refreshes it. Cards show the branch and last-commit age but no change status (opening each repository to count changes would be slow for hundreds).
-- **Pull** fast-forwards only (`--ff-only`). If the branches diverged, a dialog lists both sides and offers
-  **Merge (default, preselected)**, Rebase, Cancel. The Pull button's arrow/right-click menu has
-  "Pull (merge)" and "Pull (rebase)" to skip the dialog. All run with `--autostash`. On **conflicts the
-  operation is aborted automatically** (conflicting files named, repo left untouched) since there is no
-  conflict UI yet. `pull.rebase` is intentionally not consulted.
-- **Force push** is `git push --force-with-lease`, behind a confirmation that counts the remote commits
-  that will be discarded. Only offered when the branch has an upstream. **Push on a diverged branch** (known ahead *and* behind from the last
-  status, no network check) opens `PushDialog` (same two commit lists as the pull dialog, `getDivergence`) instead of pushing: *Force push*
-  (runs the same lease push; the dialog is its confirmation) or *Cancel* (default focus). A push rejected because the remote moved since the
-  last fetch still shows git's own message, and a force push then fails on the lease as intended.
-- **Undo / Redo** (`undo/mod.rs`, `UndoButtons` in the title bar + Ctrl/Cmd+Z): every command that changes the repository is wrapped in `undo::recorded(&path, label, Kind, || ...)`
-  (the closure starts the real work *after* the "before" snapshot; the entry is pushed only if the op succeeded and the state differs). A `Snapshot` = HEAD (branch name or
-  detached id), all local branch tips, the stash list (id + message), and for some kinds the index and the whole working directory as **trees** (built in memory with
-  `update_all` + `add_all`, so untracked files are included, ignored ones not; objects stay in the odb). `Kind` decides what is captured and restored: `Keep` (refs only: commit,
-  amend, soft reset, branch create/rename/delete, stash drop; undoing a commit leaves the content staged because the index is left alone), `Switch` (refs + safe checkout of the old
-  tree, never overwriting newer edits: merge, ff, pull, rebase family, rename, drop, checkout), `Index` (+ index tree: stage/unstage, hunks, mixed reset), `Full` (+ index and workdir trees,
-  restored by `restore_workdir` which rewrites changed files and deletes added ones: discard, stash create/pop/apply, hard reset). Undo/Redo first compare the *current* snapshot with the
-  entry's expected one; any difference (the terminal did something) = nothing happens, the journal for that repo is cleared. Stashes are restored by dropping them all and
-  `git stash store -m <message> <id>` in order (the stash commits outlive a drop). The journal is in memory per repo (`JOURNALS`, keyed by the git dir), max 50 steps; a new action clears
-  Redo. Not recorded: fetch, push, force push, remote edits (they can't be taken back locally). To make a new command undoable wrap it and choose the `Kind`; add a label that reads like
-  "Undo: <label>". Untested in the running UI; the journal logic itself is unit-tested with real repositories.
-- **Credential prompts** (`auth/mod.rs`, `features/auth/CredentialPrompt`, mounted in `App`): `run_git` (manual operations) sets
-  `GIT_ASKPASS`/`SSH_ASKPASS` (+`SSH_ASKPASS_REQUIRE=force`) to a temp-dir script (not the app data dir: git splits the command at the
-  space in `Application Support`) that runs this exe as `--askpass <prompt>` (handled first thing in `run()`); it asks the app over a
-  token-checked loopback socket, the UI answers via `answer_credentials`. `run_git_with` (auto-fetch, timeouts) never prompts, so
-  background work still fails fast with `GIT_TERMINAL_PROMPT=0`. Unix only (Windows has Git Credential Manager). The round trip is
-  unit-tested; the unix script and a real macOS push are untested here. Credentials are not stored by the app: git's credential
-  helper does that if one is configured.
-- **Fetch failures** show as a ⚠ beside "origin" in the sidebar (tooltip = git's message). `SyncBar` combines its last manual
-  fetch error with `useAutoFetch().error` and reports it up via `onFetchError` to `RepoView`, which passes `fetchError` to
-  `Sidebar` > `Remotes`. Any successful fetch, pull or background fetch clears it; a failed push does not set it.
-- **Auto-fetch**: on by default, every 180 s, only while the window is focused/visible, never overlapping a
-  manual git operation, exponential backoff when offline, pauses (does not retry) on auth errors, resumes
-  after a successful manual fetch/pull/push. Uses `--no-write-fetch-head --no-auto-gc`, 90 s timeout.
-- **Amend** switch pre-fills the last message, keeps the author, makes you the committer, works with
-  nothing staged, warns when the commit is already pushed.
-- **Interactive rebase** (graph context menu, `features/rebase/InteractiveRebase`): a full screen that covers the sidebar
-  and the centre (`RepoView` wraps both in `.workarea`; they stay mounted, `visibility: hidden` + `inert`, so the graph
-  keeps its scroll position); the right panel stays: `Changes`, or `CommitDetail` of the commit clicked in the list (`selectedId`/`onSelectCommit`, the shared
-  `selectedCommit` state). A file clicked there opens `FileDiff` in `.rebase-diff` over the rebase screen (the normal centre
-  `FileDiff` is suppressed while rebasing); `diffOpen` stops the rebase screen's own Escape. Working diffs are ignored meanwhile.
-  The clicked commit is the base and is not edited; `rebase_plan` lists the commits after it on HEAD's first-parent line
-  (max 500, newest first) plus `headId`. Each row has an action `<select>`: **pick**, **reword** (a `Modal` popup;
-  a commit only becomes "reword" when the popup is confirmed), **squash** and **drop**. `apply_rebase` (command `apply_rebase_cmd`,
-  steps `{id, action, message?}`, unlisted commits are picks) groups each squashed commit with the next older non-squashed
-  commit (a chain of squashes all go into the one that starts it), then rebuilds from the oldest changed group: parents of
-  the group's oldest commit, tree of its newest commit, author of the oldest, you as committer, message = the older
-  message + blank line + each squashed message. No cherry-picks (each commit already contains its predecessors), so no
-  conflicts and no clean working directory are needed, and the tip's tree never changes. The oldest commit and merge
-  commits can't be squashed (`RebaseGroup`), nor squashed into a dropped commit; it refuses when HEAD moved since the plan.
-  **Drop** changes content, so from the first dropped group on `replay_group` re-creates each kept commit with
-  `cherrypick_commit` onto the rebuilt parent (a dropped commit maps to its rebuilt parent in `rebuilt`); a conflict
-  abandons everything with the commit and files named, a merge commit after the first drop is refused, the working
-  directory must be clean and a hard reset (not `move_head_to`) finishes. Groups before the first drop still reuse trees.
-  **Reorder** (context menu *Move commit up/down*, UI state `order`) is sent as `order` (ids, newest first) to
-  `apply_rebase_ordered`; groups and squashes are built on the new order, `first_moved` is the first oldest-first position
-  that differs from the plan, and from there `replay_group` re-creates the commits one by one on `tip` (the previous
-  rebuilt commit; parents are `[tip]` in replay mode, mapped original parents otherwise). Same clean-working-directory,
-  merge and conflict rules as Drop. The UI computes `problem` (an action that no longer fits after a move) to block Start.
-- **Rename commit** (graph context menu) only for commits on the current branch. Rebuilds the commit and
-  every later commit with identical trees/authors/dates, then moves the branch; other branches keep the old
-  history. Warns about rewritten descendants and pushed commits.
-- **Drop commit** (graph context menu, `history/drop.rs` `drop_plan`/`drop_commit`) works for any commit on the checked-out
-  branch's own first-parent line when no merge commit lies between it and the tip, and the commit has a parent.
-  The commits after it are re-created in memory with `cherrypick_commit` (3-way merge, original author, committer
-  and message; empty results are kept, not silently dropped); a conflict aborts with the commit and files named
-  and nothing changed. Only then does a hard reset move the branch, index and working directory, so the working
-  directory must be clean. The confirmation (RepoView `dropCommit`, data from `get_drop_info`: later commits,
-  pushed counts, merge flag) warns about rewritten ids, pushed history (force push), merge commits, other refs
-  keeping the old history and lost signatures. Errors use the native `showError` dialog. **Revert commit** (the
-  non-rewriting alternative for pushed commits) is not built.
-- **Merge** (`graph/merge.rs`; *Merge <branch> into <current>* in a local branch's menu, *Merge <remote>/<branch> into the current branch* in a remote branch's, via `RepoView.mergeInto`): merges into the checked-out branch only, after a confirmation. Runs `git merge --no-edit --autostash <full ref>` (system git, so the user's identity/config apply; the ref must start with `refs/`, which also keeps it from being read as an option). Same conflict policy as Pull: no conflict UI, so a conflicted merge is aborted with `cancel_unfinished` (files named, nothing changed). Fast-forwardable branches fast-forward (no merge commit); an already contained branch is reported with an info box. Refused on a detached HEAD or while another operation is in progress.
-- **Rebase onto a branch** (`graph/rebase_onto.rs`; *Rebase <current> onto <branch>* in a local branch's menu, via `RepoView.rebaseOntoBranch`): system git `rebase --autostash <full ref>` of the checked-out branch (not the app's own interactive-rebase engine), after a confirmation built from `get_rebase_onto_info` (`graph_ahead_behind`, plus `history::is_pushed` and parent counts over the replayed commits; the dialog turns to the warning style when some are pushed). Same conflict policy as Pull and Merge: `cancel_unfinished` aborts and names the files. A plain rebase flattens merge commits (`--rebase-merges` is not used); the dialog says so. Behind-only branches fast-forward, contained ones report "up to date". One undo step (`Kind::Switch`). Offered by local branches in the sidebar and, with Merge, by any branch label (local or remote) on a graph row via `Graph.branchActionItems` (same `RepoView` handlers; the checked-out branch is never a target). Remote branches in the sidebar don't offer rebase.
-- **Fast-forward** (`graph/fast_forward.rs`; *Fast-forward to this commit* in the graph menu, *Fast-forward <current> to <branch>* in a local branch's menu, both through `RepoView.fastForwardTo`): `git merge --ff-only` semantics on the checked-out branch only. The target must be a strict
-  descendant of HEAD (otherwise errors: already contained, or diverged with both counts), HEAD must be a branch, the repo state clean. The files are
-  checked out safely first (uncommitted changes in the way abort it, nothing moves), then the branch ref moves. No confirmation (nothing is lost);
-  errors use `showError`. The UI only pre-disables the obvious cases (stash, already on the branch's line, the branch itself); the rest is the backend's message.
-- **Reset** (graph context menu, `graph/reset.rs`): a *Reset to this commit* group whose submenu offers Soft / Mixed / Hard on any non-stash commit,
-  each behind a confirmation whose text is built by `features/repo/describeReset.ts` from `get_reset_info` (commits
-  removed with the newest few listed, commits gained, pushed count, uncommitted file count, ancestor or jump to another
-  line). It is plain `git2` `reset` (Soft/Mixed/Hard), also allowed on a detached HEAD, refused during a merge/rebase
-  and on an empty repo. Hard leaves untracked files alone; only uncommitted changes are unrecoverable (removed commits
-  stay in the reflog).
-- **Multiple remotes**: the sidebar lists every remote (`Remotes.tsx`, one block each); adding one and choosing the target
-  live in the "⋯" menu of the section headline (`Section`'s `action` prop; its mouse-down stops propagation like the split buttons). The **target remote**
-  (`remotes::target_remote`) is where Push publishes a branch without an upstream (`push --set-upstream`): the one the user
-  chose (repo-local git config `rustygit.targetremote`), else `origin`, else the first remote; deleting the target clears the
-  choice. Everything else already follows each branch's own upstream (fetch is `--all`, pull/push use `branch.<n>.remote`).
-  Removing a remote (`remote_delete`) drops its remote-tracking refs and the upstream of branches that tracked it, never
-  touches the server, and confirms first. Names are checked with `Remote::is_valid_name`. The fetch-failure ⚠ shows on every
-  remote because the fetch covers all of them.
-- **Graph highlighting** (`Graph.tsx` `isCurrent`, `Graph.scss`): the row of the commit HEAD points at (a ref label with `isHead`, also a detached HEAD) gets `.current` (accent bar via inset
-  box-shadow, faint tint placed *before* hover/selected so they win, bold subject) and a ring around its node; rows with `!onHead` (not reachable from HEAD, not WIP/stash) get `.off` (text at 60% opacity). The accent colour is
-  hard-coded as `rgba(63, 167, 160, …)` for the tints because the SCSS token is a CSS variable.
-- **Checkout from the graph** (`Graph`: `checkoutTargets`, `checkoutItems`, `doubleClickTarget`; `RepoView.checkoutRef`): a row whose `refs` include a `branch` or `remote` label that is not `isHead` (so never the checked-out branch
-  or a detached HEAD) gets *Check out <name>* first in its menu (a submenu if several) and a double-click does it (local branch preferred, else the single remote one). Local = `checkout_local_branch`;
-  remote = `checkout_remote_branch` with the label split at its first `/` (remote names with a slash would fail with "not found"). Stashes and the WIP row offer nothing.
-- **Remote branch checkout** (`checkout_remote_branch`, double-click or first item of its menu): creates local `<name>` at the remote tip with
-  upstream `<remote>/<name>` and checks it out safely (the new branch is removed again if the checkout fails); an existing local
-  branch is reused only if it already tracks that remote branch, otherwise it errors rather than taking it over.
-- **Branch rename** (inline editor in the sidebar) works for every local branch, the checked-out one included (libgit2's `Branch::rename` moves HEAD and the `branch.<n>.*` config with it; the files are untouched; the
-  remote-tracking branch it follows keeps its name), but is not allowed for the branch the checked-out branch tracks (remote). Remote rename = one atomic push of the new name plus
-  deletion of the old one, guarded by a lease; local branches that tracked it are repointed.
-- **Working-tree diffs** (click a file in Changes): *unstaged* = index vs file on disk (untracked files show as
-  all additions), *staged* = HEAD vs index (on an unborn branch everything staged is an addition). Staging
-  buttons on a row stop propagation so they don't also open the diff. Committing closes an open working diff.
-- **Uncommitted changes** are a pseudo commit (`WIP_ID` "WIP", `isWip`) inserted by `build_graph` as the first
-  row when HEAD has a commit and `status_of` reports changes: a dashed lane (`Edge.dashed`) leads down to HEAD's
-  commit, so it lands in that commit's lane. Clicking it calls `closeCommit()` (right panel returns to `Changes`);
-  it counts as selected whenever no commit is selected. It has no context menu. File edits aren't watched, so
-  `Graph` also refetches on window focus.
-- **Stash** moves all uncommitted changes, **including untracked files** (not ignored ones), into a stash with an
-  optional message (`Stash…` button beside Commit and a *Stash* button in the title bar between `SyncBar` and the terminal toggle, both opening `StashDialog`; the title bar one is
-  owned by `RepoView`, which counts the changes with `useWorkingChangeCount`). Stashes are visible in the graph (hollow node
-  off the base commit, `stash@{n}` chip, row `isStash`) and in a left-panel `Stashes` section; clicking either
-  opens the stash's `CommitDetail`. **Pop** is a button in that panel's bottom footer (`cd-footer`, mirroring
-  the Stash button under the staging lists) and a *Pop stash* item in the right-click menu of a Stashes row
-  (`pop_stash`: apply, check for conflicts, then drop;
-  re-stages what was staged). Pop requires a clean working directory (disabled in the UI via
-  `useWorkingChangeCount`, enforced in Rust) so a
-  conflicting pop can be undone exactly (`restore_clean`) with the stash kept. **Delete stash** (`drop_stash_cmd`, Stashes right-click,
-  confirmation first) just calls `stash_drop` by commit id and needs no clean working directory. **Delete all stashes** (Stashes "⋯" menu, `drop_all_stashes_cmd`) drops position 0 repeatedly; one undo step (`Kind::Keep`, the stash list is restored with `git stash store`); `onAllStashesDropped` closes the right panel if it showed one of them. **Apply** (`apply_stash_cmd`, `apply_stash(repo, id, remove)`; pop is `apply_stash(.., true)`) is the same
-  clean-directory apply and conflict undo without the final drop. Both menus offer it: Stashes list and, for `isStash` rows, the graph's context menu (which
-  then shows only Apply / Pop / Delete stash, via `RepoView.stashAction`; `hasChanges` disables Apply and Pop).
-- **File context menu** (right-click a row in `Changes`): Unstaged = Stage / Discard / Stash, Staged = Unstage / Stash. Discard
-  (`discard_paths`) restores from the index (so staged edits survive) or deletes an untracked file, only for paths that
-  really have unstaged changes, never for conflicted files, always after a confirmation. Single-file **Stash**
-  runs `git --literal-pathspecs stash push --include-untracked -- <paths>`: libgit2's path-limited `stash_save_ext` also
-  cleans the files that were NOT selected, and git2 cannot set its message, so don't use it.
-- **File history** (*File history* in the Changes file menu, not for new files, and in the file menu of `CommitDetail`, which then passes `from` = the selected commit so
-  the log starts there: `get_file_history(path, file, from)` takes only a hex id, validated with `Oid::from_str` before it reaches git; no menu for stash files or during a rebase):
-  `RepoView` keeps `history: { file, from, entry }`. `FileHistory` (centre, `center-pane`,
-  stays mounted but `hidden` while a commit's diff is open so the scroll position survives; its Escape is off then via `active`) lists
-  `get_file_history`; a click sets `entry` and shows the existing `FileDiff` with `source` = that commit and the path *as it was in that commit*
-  (+ `oldPath` for renames), with `backLabel`/`backHint` overriding the back button. Uses system git (`--follow` is not available in libgit2) with
-  `--literal-pathspecs`; merge commits without a change to the file simply don't appear. Selecting a commit/working file or starting a rebase closes it.
-- **Hunks**: a hunk is a maximal run of added/removed lines (`DiffLine::block`, numbered in file order and identical in
-  full-file and context-only views); `FileDiff::blocks` holds one FNV fingerprint per hunk. Every diff view shows a
-  heading row per hunk; only the *unstaged* view of a tracked, non-conflicted, non-binary file gets **Stage hunk** /
-  **Discard hunk**, and the *staged* view gets **Unstage hunk** (`stage_hunk_cmd` / `discard_hunk_cmd` /
-  `unstage_hunk_cmd`, which re-diff and refuse with a "changed since this diff
-  was shown" error when the fingerprint no longer matches). They do not build patches: `changes/hunks.rs` rebuilds the
-  index blob (stage) or the file on disk (discard) line by line from the full-file diff using each line's raw bytes,
-  so CRLF files and a missing final newline survive (discard re-inserts restored lines with the file's own EOL).
-  Staging a deletion removes the index entry; discarding one checks the file out of the index. Unstaging rebuilds
-  the index blob from the HEAD-to-index diff with that hunk reverted to HEAD's lines; if the file is not in HEAD
-  (new file, or a branch without commits) and nothing is left, the index entry is removed, and a staged deletion
-  is re-added from HEAD. The file on disk is never touched. Discarding a staged hunk is not offered.
-- **Stage line(s)** (`stage_lines_cmd` in `changes/hunks.rs`, right-click an add/del line in the unstaged diff of a tracked file; `FileDiff` `lineMenu`): `stage_selected` is `stage_hunk`'s code with a target line: the request is a list of `LineRef`s: hunk (`block` + fingerprint) and the line's position among that hunk's add/del lines (`line`, identical in full-file and changes-only views, so the UI needs no mapping); lines may come from several hunks, each hunk's fingerprint is checked (`locate_blocks`, `hunks_of`) and `resolve_lines` turns them into positions in the full-file diff (`Pick::Lines`; `Pick::Hunk` for whole hunks). The index blob is rebuilt from the full-file diff: context kept, a selected `del` dropped, a selected `add` taken in, every other change left as the index has it (so a removed line staged on its own leaves the replacement unstaged and vice versa). A wrong fingerprint or an offset past the hunk is refused as stale. One undo step (`Kind::Index`). **Discard line(s)** (`discard_lines_cmd`, `Kind::Full`, behind one confirmation) is `discard_hunk`'s code with the same target line (`discard_pick`, `Pick` shared with staging): an `add` line is left out of the file on disk, a `del` line is re-inserted from the index with the file's own EOL; a deleted file gets recreated with just that line. The index is never touched. The staged diff has no line menu yet. **Multi-line selection uses the browser's own text selection**, not a custom one: on right-click `FileDiff.selectedRows()` clips the selection `Range` to each rendered `.dl[data-row]`'s `.tx` and counts the rows with text inside (so a selection that only touches a line's end or the next line's start doesn't count); if the right-clicked line is among ≥ 2 selected changed lines the menu acts on all of them ("Stage N lines"), otherwise on that one. Rows are keyed by their absolute index so their DOM nodes (and the selection) survive scrolling, but the list is virtualised: only rows in view ± 20 exist, so a selection can't reach beyond them.
-- **Commit search** (title bar *Search*, the far right, or Ctrl/Cmd+F; `RepoView` owns `searchOpen` and `searchFocus`, a counter that refocuses an open bar): `Graph` renders `SearchBar` above its scroller. The bar debounces (200 ms), re-searches on `refreshKey`, reports hits (`onHits`, highlighted as `.match` rows) and steps with Enter / Shift+Enter from the selected hit (wrapping). Stepping selects the commit through `onSelectCommit` and sets `reveal`; because the graph is paged, `Graph` then loads through the hit's `index` in one request (`loadMore`) and centres it. Hits are not auto-selected while typing (that would keep replacing the right panel). Opening the search closes a diff or file history covering the graph; it is off during an interactive rebase.
-- In the full-file view `FileDiff` draws change markers over the vertical scrollbar (`.fd-marks`: runs of add/del rows as percentages of the
-  virtual list, `pointer-events: none`, narrower than the 10px scrollbar so the thumb stays visible; shown only when the list scrolls).
-- `FileDiff` header ▲ / ▼ buttons jump between hunk heading rows (smooth scroll, two rows of context above; "where we are" = scrollTop + 2 rows, so
-  repeated clicks always advance; disabled at the first/last hunk and when the list can't scroll further). No keyboard shortcut: ↑/↓ already move
-  between files while a diff is open.
-- Commit detail diffs are against the **first parent**; renames detected; 2000-file and 20 000-line caps;
-  binary/over-5 MB files are not previewed. The diff view has three modes (`FileDiff` `mode`, header buttons, persisted as `diff.mode`): *Full file* (default), *Changes* (the backend's context-only diff) and *Side by side*. **Side by side** uses the full-file diff (`full = mode !== "hunks"`) and only changes how `rows` are built: `del`/`add` runs are flushed as `pair` rows (the i-th removed line next to the i-th added one, blanks opposite the longer run), context lines appear on both sides; hunk headings stay full-width rows, so hunk buttons, ▲/▼ navigation (`hunkTops`) and the virtual list (fixed `ROW_H`) are unchanged. Each half is `flex: 1 0 auto` with a min-width of the longest line (`--cols`, capped at 300) so the row scrolls as one. Line stage/discard work per half (`LineTarget.side`; `targetOf(row, side)`) but a single line at a time: the text-selection multi-select reads one `.tx` per row and would run across both halves. Scrollbar marks use `mod` for a removed line facing an added one.
+The product decisions and implementation details of each feature live in `docs/design/`, one file per area. **Read the matching file before changing that area**, and
+update it when a decision changes (new decisions go in the right file; split a file once it passes ~150 lines). What the user sees is in `docs/features/`.
 
-- **Merge conflicts** (`changes/conflicts.rs`, `features/conflicts/ConflictView`, banner in `Changes`): only `merge` and `pull_with(.., "merge")` stop on conflicts, and only with a **clean working directory**: `git merge --autostash` keeps the stashed changes hidden until the merge ends (`MERGE_AUTOSTASH`), and libgit2's commit would never restore them, so a dirty tree keeps the old behaviour (autostash, abort with `cancel_unfinished`, message adds "commit or stash first"). `merge` returns `MergeOutcome::Conflicts`, the pull returns an Ok message. The state is git's own (MERGE_HEAD + index conflicts): `get_merge_state` feeds the banner and pre-fills the message, and the existing `commit_staged` already concludes a merge (extra parents, `cleanup_state`). The view parses the *working file's* markers (so editor edits count), keeps every line's own EOL (textarea values read back with LF, so a hand-edited result is converted back to the file's EOL), and chooses per conflict in the frontend; whole-file side buttons go through system git so filters apply and a deleted side deletes the file. The commit button is enabled during a merge with nothing staged, disabled while conflicts remain. Resolve/abort are not in the undo journal (snapshots can't capture a conflicted index; the merge commit itself is undoable as usual). Sides are named as in a merge: a rebase swaps ours/theirs, so reuse for rebase needs a mapping. UI untested in the running app.
+| File | Read it for |
+| --- | --- |
+| `sync-and-remotes.md` | Pull (ff-only, diverged dialog), force push, credential prompts (`GIT_ASKPASS`), fetch failures, auto-fetch, multiple remotes and the target remote |
+| `graph-and-branches.md` | Start screen, graph highlighting, checkout from the graph, remote branch checkout, branch rename, clean up merged, delete synced, the WIP row, commit search |
+| `history-rewrites.md` | Interactive rebase, rename, drop, merge and its conflict view, rebase onto, fast-forward, reset |
+| `undo.md` | The undo journal: snapshots, `Kind`s, how to make a command undoable |
+| `changes-and-diffs.md` | Amend, working-tree diffs, stash, the Changes file menu, file history, hunks, stage/discard line(s), diff view modes and chrome |
+| `files-tab.md` | The Files sidebar tab, the file viewer and editor, blame hint, terminal references |
+| `building-and-release.md` | CI jobs, the build and run scripts and their gotchas, the app icon, release notes |
 
 ## Pitfalls learned the hard way
 
@@ -440,58 +288,11 @@ separate CSS step.
 
 ## Building and distribution
 
-**Decision: unsigned builds, no auto-updater.** The author builds locally with the scripts below, or takes the installers
-from the CI workflow (next paragraph). Don't add signing or an updater unless asked; if distribution to others comes up, the options already discussed are:
-`tauri-action` on GitHub Actions (builds Windows + macOS and attaches them to a Release), `tauri-plugin-updater`
-(needs its own signing key pair, kept as a CI secret and never committed, plus a `latest.json` on the
-Release), and a Windows code-signing certificate to avoid the SmartScreen "unknown publisher" warning.
+Details (CI jobs, build scripts and their gotchas, the icon, release notes) are in `docs/design/building-and-release.md`: read it before touching `.github/`, `scripts/` or a release.
 
-- **CI** (`.github/workflows/ci.yml`): jobs `frontend` (ESLint, `npm run build`), `rust-lint` (rustfmt, clippy `-D warnings`),
-  `rust-test` (Windows and macOS only, `fail-fast: false`) and, after all three, `build` (Windows NSIS+MSI; macOS universal
-  DMG via `--target universal-apple-darwin`) uploading artifacts. Lint and tests run on every push and PR; `build` and
-  `release` run **only on a `release/<version>` branch** (the name must equal the `package.json` version, checked in `build`),
-  and `release` creates a **draft** release `v<version>` with `gh release create` targeting that commit. No third-party release action, no
-  secrets beyond `GITHUB_TOKEN`. Builds are unsigned (macOS needs right-click > Open). Nothing here has run on GitHub yet when this
-  was written: if a job fails, fix the workflow from the log (Linux needs the webkit2gtk/xdo/appindicator packages just to compile).
-  ESLint (`eslint.config.js`) enables only `rules-of-hooks` and `exhaustive-deps` from the react-hooks plugin: its React Compiler
-  rules flag deliberate patterns (state reset in effects on `path` change, ref sync during render).
-  **The tests are not run on Linux**: that job hung (after the `terminal` chunker test; the PTY test forking a shell while
-  other tests spawn git on other threads is the suspect, unconfirmed), so the Ubuntu leg was dropped. Re-enable it by adding `ubuntu-latest` to the matrix (it needs the webkit2gtk/xdo/appindicator packages). Every
-  job has a timeout. Lint (`rust-lint`) and the frontend still run on Ubuntu.
-- Build with the scripts in `scripts/`: `build-release.cmd` (Windows launcher, double-clickable; runs the
-  `.ps1` with `-ExecutionPolicy Bypass` because the default policy blocks unsigned .ps1 files) and
-  `build-release.sh` (macOS/Linux/Git Bash; tested here only under Git Bash on Windows). Both check the
-  toolchain, run `npm ci` if needed, build and list the fresh artifacts; options: `-Bundles all|nsis|msi|none`
-  / `--bundles`, `--no-bundle`, skip install, open folder. `.gitattributes` pins their line endings (sh = LF,
-  cmd/ps1 = CRLF), and the `.sh` must be committed with the executable bit
-  (`git update-index --chmod=+x scripts/build-release.sh`). Underneath it is `npm run tauri build` (verified
-  working, about 2.5 minutes for a cold release build, about 1.5 minutes for a rebuild). It produces, under `src-tauri/target/release/`: `rusty-git-client.exe` (6.9 MB, runs
-  standalone given WebView2), `bundle/nsis/Rusty Git Client_0.1.0_x64-setup.exe` (2.2 MB) and
-  `bundle/msi/Rusty Git Client_0.1.0_x64_en-US.msi` (3.1 MB). The first build downloads the WiX and NSIS tools
-  from GitHub. All of `target/` and `dist/` is git-ignored. Run it with `export PATH="$PATH:$HOME/.cargo/bin"`
-  in the Bash tool; a cold build prints one line per crate, so redirect output to a log in the scratchpad and
-  run it in the background.
-- **Build and run**: `npm run build:run` (`scripts/run-release.mjs`, plain Node so it behaves the same everywhere) runs `npm run tauri build -- --no-bundle` and starts `src-tauri/target/release/rusty-git-client[.exe]` detached (`--skip-build` only starts it). The build scripts have the same as a flag: `-Run` (ps1/cmd) and `--run` (sh). Only `--help`, the syntax of the scripts and the build step (which is the normal `tauri build`) were checked; the launch itself was not run from here, since it opens a window.
-- Gotchas from writing the scripts: the `.cmd` pauses at the end only when started with no arguments (the
-  double-click case); set `NOPAUSE=1` when another program runs it. In the `.sh`, `set -e` + `pipefail`
-  turns a failing `find` on a missing folder (`bundle/macos` on Windows) into a silent script failure: guard
-  such commands with `|| true`. Installers are listed only if newer than the run's start, so stale ones from an
-  earlier build aren't reported as results. Keep the `.ps1` ASCII-only (Windows PowerShell 5.1 misreads
-  BOM-less UTF-8).
-- **Release notes** live in `docs/releases/v<version>.md` (the name matches the tag `release/<version>` creates), one file per
-  release, written for the people who download it: requirements, downloads, what is in it, known limitations. Write the next
-  one when the version is bumped; copy the structure of the previous file and list only what changed.
-- macOS builds can only be made on a Mac.
-- **The app shells out to the system `git`**, so users need Git installed and on PATH; the installers cannot
-  bundle it. The app reports "git executable not found" when it is missing.
-- The app icon (a red long branch and a blue short branch on a dark tile) was drawn with GDI+ in PowerShell (no Python/ImageMagick here); `src-tauri/icons/icon-source.png` (1024 px) is the source, regenerate the set with `npx tauri icon src-tauri/icons/icon-source.png`. That also creates `android/`, `ios/` and `64x64.png`, which are not used (desktop only): delete them again.
-- The version lives in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json`; keep them in sync.
-- The bundle identifier is `net.senorincognito.gitclient` (it keys the saved data), see "Persisted state". It replaced
-  `com.gitclient.app`, which no longer ends in `.app` (that clashed with the macOS bundle extension).
-
-## Not implemented yet
-
-pushing tags; unstaging a single line (staging and discarding one are built); merge/rebase as standalone actions; discard
-changes and stash; conflict resolution for rebase/cherry-pick/revert (merges and merge-pulls have it); syntax highlighting and intra-line diff highlighting; side-by-side diff; a
-"you rewrote pushed history, force push instead" hint in the diverged-pull dialog; a conflict preview
-(`git merge-tree`) before pulling.
+- **Unsigned builds, no auto-updater** (decision): don't add signing or an updater unless asked; the options already discussed are in the design file.
+- Build locally with `npm run build:run` (release build, then start it) or `scripts/build-release.*`; underneath it is `npm run tauri build`.
+- CI lint and tests run on every push; `build` and `release` run **only on a `release/<version>` branch** (the name must equal the `package.json` version) and create a draft release.
+- The version lives in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json`; keep them in sync. The bundle identifier is `net.senorincognito.gitclient`, see "Persisted state".
+- Release notes: `docs/releases/v<version>.md`, one per release, written when the version is bumped (copy the previous file's structure, list only what changed).
+- The app shells out to the system `git`, so users need Git on PATH ("git executable not found" when missing). macOS builds can only be made on a Mac.

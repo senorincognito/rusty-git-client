@@ -38,8 +38,10 @@ Esc leaves text fields and the terminal alone, so it never interferes with typin
 
 ## Not yet implemented
 
-- Merge and rebase as standalone actions, revert commit
+- Pushing tags
 - Unstaging a single line (staging and discarding one are built)
 - Conflict resolution for rebases, cherry-pick and revert (only merges, and pulls that merge, stop for the conflict view; the others are cancelled)
-- Syntax highlighting and intra-line diff highlighting, side-by-side diff
+- Syntax highlighting and intra-line diff highlighting
+- A "you rewrote pushed history, force push instead" hint in the diverged-pull dialog
+- A conflict preview (`git merge-tree`) before pulling
 - Multiple remotes work, but only the target remote is used to publish new branches
