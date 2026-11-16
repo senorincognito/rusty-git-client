@@ -80,3 +80,26 @@
     color: $text;
   }
 }
+
+// Pinned to the right edge, also while many tabs scroll the bar.
+.tab-settings {
+  position: sticky;
+  right: 0;
+  flex: none;
+  align-self: center;
+  margin: 0 0 4px auto;
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: $bg;
+  color: $muted;
+  font-size: 15px;
+  line-height: 1;
+  border-radius: $radius-sm;
+  cursor: pointer;
+
+  &:hover {
+    background: $press-tint;
+    color: $text;
+  }
+}

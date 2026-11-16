@@ -59,6 +59,14 @@ pub(crate) fn run_git_with(path: &str, args: &[&str], timeout: Option<Duration>)
 }
 
 fn run_git_inner(path: &str, args: &[&str], timeout: Option<Duration>, may_ask: bool) -> Result<String, String> {
+    let id = crate::gitlog::begin(path, args);
+    let started = Instant::now();
+    let result = run_git_process(path, args, timeout, may_ask);
+    crate::gitlog::finish(id, &result, started.elapsed());
+    result
+}
+
+fn run_git_process(path: &str, args: &[&str], timeout: Option<Duration>, may_ask: bool) -> Result<String, String> {
     let mut cmd = Command::new("git");
     cmd.arg("-C")
         .arg(path)

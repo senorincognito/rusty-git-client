@@ -11,6 +11,7 @@ import { cherryPick, dropLatestCommit, fastForward, getDropInfo, getRebaseOntoIn
 import { deleteFile } from "@/api/files";
 import { openRepo, type RepoInfo } from "@/api/repo";
 import { unwatchRepo, watchRepo } from "@/api/watch";
+import GitLogPanel from "@/features/gitlog/GitLogPanel";
 import { usePersistentState } from "@/hooks/usePersistentState";
 import { useWorkingChangeCount } from "@/hooks/useWorkingChangeCount";
 import BusyBar from "@/components/BusyBar";
@@ -49,6 +50,8 @@ export default function RepoView({
 }) {
   const [graphKey, setGraphKey] = useState(0);
   const [terminalOpen, setTerminalOpen] = useState(false);
+  // The git command list; remembered because a tab switch remounts this view.
+  const [commandsOpen, setCommandsOpen] = usePersistentState("gitLog.open", false, (v): v is boolean => typeof v === "boolean");
   // xterm is the biggest dependency, so its code is fetched on the first open. After that the panel stays mounted
   // (hidden) so the shell session survives closing it.
   const [terminalLoaded, setTerminalLoaded] = useState(false);
@@ -449,6 +452,13 @@ export default function RepoView({
           {t.repo.terminal}
         </button>
         <button
+          className={"syncbtn cmdtoggle" + (commandsOpen ? " active" : "")}
+          onClick={() => setCommandsOpen(!commandsOpen)}
+          title={t.repo.commandsHint}
+        >
+          {t.repo.commands}
+        </button>
+        <button
           className={"syncbtn searchbtn" + (searchOpen ? " active" : "")}
           disabled={rebasing !== null}
           onClick={() => (searchOpen ? closeSearch() : openSearch())}
@@ -744,9 +754,16 @@ export default function RepoView({
           }}
         />
       )}
+      {commandsOpen && <GitLogPanel onClose={() => setCommandsOpen(false)} />}
       {terminalLoaded && (
         <Suspense fallback={null}>
-          <TerminalPanel path={path} open={terminalOpen} onClose={() => setTerminalOpen(false)} paste={terminalPaste} />
+          <TerminalPanel
+            path={path}
+            open={terminalOpen}
+            onClose={() => setTerminalOpen(false)}
+            paste={terminalPaste}
+            refsKey={graphKey}
+          />
         </Suspense>
       )}
     </div>

@@ -16,13 +16,17 @@ The details live in one file per area under [docs/features/](docs/features/).
 - [Branches and remotes (left panel)](docs/features/branches-and-remotes.md): Local branches, clean-up, remotes, the filter and branch / remote context menus.
 - [Files](docs/features/files.md): Browsing every file of the working directory in a folder tree and reading its content.
 - [Fetch, pull and push](docs/features/sync.md): The sync buttons, diverged branches, force push, auto-fetch and sign-in prompts.
-- [Terminal](docs/features/terminal.md): The built-in terminal panel.
+- [Terminal](docs/features/terminal.md): The built-in terminal panel, with branch and tag suggestions.
+- [Git command list](docs/features/git-commands.md): A toggleable panel listing the git commands the app runs, with their results.
+- [Settings](docs/features/settings.md): The Settings dialog and what it controls.
 
 ## Keyboard shortcuts
 | Key | Action |
 | --- | --- |
 | `Esc` | Close the diff in the centre (same as **Back**); also closes menus and dialogs and cancels inline editors |
 | `Ctrl` + `` ` `` | Show or hide the terminal |
+| `Ctrl`/`Cmd` + `,` | Open Settings |
+| `Tab` / `↑` `↓` / `Esc` while the terminal shows branch suggestions | Insert the highlighted name / choose / close the list |
 | `Ctrl` + `F` (`Cmd` + `F` on macOS) | Search commit messages, tags and SHAs (not inside the terminal) |
 | `Enter` / `Shift` + `Enter` in the search field | Select the next / previous match; `Esc` closes the search |
 | `Ctrl`/`Cmd` + `Enter` | Commit (staging panel) or Update (rename dialog) |

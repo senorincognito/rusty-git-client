@@ -2,6 +2,8 @@ import type { RepoInfo } from "@/api/repo";
 import { t } from "@/i18n";
 import "./TabBar.scss";
 
+const isMac = /Mac/.test(navigator.userAgent);
+
 /** One tab per open repository, closable like browser tabs; "+" shows the start screen to open another. */
 export default function TabBar({
   tabs,
@@ -9,6 +11,7 @@ export default function TabBar({
   onSelect,
   onClose,
   onNew,
+  onSettings,
 }: {
   tabs: RepoInfo[];
   /** Path of the active tab; null while the start screen is shown. */
@@ -16,6 +19,7 @@ export default function TabBar({
   onSelect: (path: string) => void;
   onClose: (path: string) => void;
   onNew: () => void;
+  onSettings: () => void;
 }) {
   return (
     <div className="tabbar" role="tablist">
@@ -57,6 +61,9 @@ export default function TabBar({
         onClick={onNew}
       >
         +
+      </button>
+      <button className="tab-settings" title={t.settings.openHint(isMac ? "Cmd" : "Ctrl")} aria-label={t.settings.open} onClick={onSettings}>
+        ⚙
       </button>
     </div>
   );

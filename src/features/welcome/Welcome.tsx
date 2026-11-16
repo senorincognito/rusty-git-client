@@ -37,7 +37,9 @@ function ago(seconds: number): string {
  * Start screen, two panels side by side: the recently opened repositories on the left, and on the right every
  * repository found inside a folder the user picked (remembered between sessions) for quick switching.
  */
-export default function Welcome({ onOpen }: { onOpen: (repo: RepoInfo) => void }) {
+const isMac = /Mac/.test(navigator.userAgent);
+
+export default function Welcome({ onOpen, onSettings }: { onOpen: (repo: RepoInfo) => void; onSettings: () => void }) {
   const [recents, setRecents] = useState<RepoInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [folder, setFolder] = useState<string | null>(null);
@@ -128,6 +130,14 @@ export default function Welcome({ onOpen }: { onOpen: (repo: RepoInfo) => void }
         <h1>{t.welcome.title}</h1>
         <button className="primary" onClick={browse}>
           {t.welcome.open}
+        </button>
+        <button
+          className="ghost welcome-settings"
+          title={t.settings.openHint(isMac ? "Cmd" : "Ctrl")}
+          aria-label={t.settings.open}
+          onClick={onSettings}
+        >
+          ⚙
         </button>
       </header>
       {error && <p className="error welcome-error">{error}</p>}

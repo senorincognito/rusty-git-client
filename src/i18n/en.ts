@@ -707,6 +707,8 @@ export const en = {
     stashNothing: "No uncommitted changes to stash",
     terminal: ">_ Terminal",
     terminalHint: "Toggle terminal (Ctrl+`)",
+    commands: "Commands",
+    commandsHint: "Show or hide the git commands the app runs",
     search: "Search",
     searchHint: (key: string) => `Search commit messages, tags and SHAs (${key}+F)`,
     searchRebasing: "Not available during an interactive rebase",
@@ -800,10 +802,33 @@ export const en = {
     reflog: "The removed commits stay in git's reflog for a while, so they can be recovered with git reflog.",
   },
 
+  settings: {
+    title: "Settings",
+    open: "Settings",
+    openHint: (mod: string) => `Settings (${mod}+,)`,
+    close: "Close",
+    terminal: "Terminal",
+    terminalAutocomplete: "Suggest branches and tags",
+    terminalAutocompleteHint:
+      "While you type a git command that takes a branch or tag (checkout, merge, rebase, ...), a list of matching names appears. Tab inserts the highlighted one, ↑ / ↓ choose, Esc closes the list. It stops following the line when you use history, the arrow keys or the shell's own Tab completion, until the next Enter.",
+  },
+
   terminal: {
     title: "Terminal",
     hide: "Hide terminal (Ctrl+`)",
     startFailed: (error: string) => `\r\nCould not start the terminal: ${error}\r\nPress any key to retry.\r\n`,
+  },
+
+  gitLog: {
+    title: "Git commands",
+    hint: "The calls to the git program. Operations done inside the app itself (staging, checkout, branches, stashes) run no command and are not listed.",
+    filterPlaceholder: "Filter commands",
+    clear: "Clear",
+    clearHint: "Empty the list",
+    hide: "Hide the command list",
+    running: "running…",
+    empty: "No git command yet. Fetch, pull, push, merge, rebase, commit and similar actions show up here with their result; staging, checkout and branch actions are done inside the app and run no command.",
+    noMatch: "No command matches the filter.",
   },
 
   autoFetch: {

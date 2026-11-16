@@ -2,6 +2,7 @@ mod auth;
 mod changes;
 mod commit;
 mod files;
+mod gitlog;
 mod graph;
 mod history;
 mod repo;
@@ -23,10 +24,13 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             auth::start(app.handle().clone());
+            gitlog::start(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             auth::answer_credentials,
+            gitlog::get_git_log,
+            gitlog::clear_git_log,
             undo::get_undo_state,
             undo::undo_cmd,
             undo::redo_cmd,

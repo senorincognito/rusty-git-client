@@ -2,9 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import type { RepoInfo } from "@/api/repo";
 import CredentialPrompt from "@/features/auth/CredentialPrompt";
 import RepoView from "@/features/repo/RepoView";
+import SettingsDialog from "@/features/settings/SettingsDialog";
 import TabBar from "@/features/tabs/TabBar";
 import Welcome from "@/features/welcome/Welcome";
 import "./styles/main.scss";
+
+const isMac = /Mac/.test(navigator.userAgent);
 
 function App() {
   // Open repositories, one tab each. Only the active tab's RepoView is mounted: a background tab has no watcher,
@@ -12,6 +15,7 @@ function App() {
   const [tabs, setTabs] = useState<RepoInfo[]>([]);
   // Path of the active tab; null shows the start screen (the "+" tab, or no tabs at all).
   const [active, setActive] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const openTab = useCallback((repo: RepoInfo) => {
     setTabs((prev) => (prev.some((r) => r.path === repo.path) ? prev.map((r) => (r.path === repo.path ? repo : r)) : [...prev, repo]));
@@ -44,16 +48,31 @@ function App() {
     return () => document.removeEventListener("contextmenu", onContextMenu);
   }, []);
 
+  // Ctrl/Cmd+, opens Settings from anywhere (the terminal's key handler lets it through).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "," || e.shiftKey || e.altKey) return;
+      if (!(isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey)) return;
+      e.preventDefault();
+      setSettingsOpen(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const current = tabs.find((r) => r.path === active);
 
   return (
     <>
       <div className="app">
         {tabs.length > 0 && (
-          <TabBar tabs={tabs} active={active} onSelect={setActive} onClose={closeTab} onNew={() => setActive(null)} />
+          <TabBar tabs={tabs} active={active} onSelect={setActive} onClose={closeTab} onNew={() => setActive(null)}
+            onSettings={() => setSettingsOpen(true)}
+          />
         )}
-        {current ? <RepoView key={current.path} repo={current} onRepoChange={updateTab} /> : <Welcome onOpen={openTab} />}
+        {current ? <RepoView key={current.path} repo={current} onRepoChange={updateTab} /> : <Welcome onOpen={openTab} onSettings={() => setSettingsOpen(true)} />}
       </div>
+      {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
       <CredentialPrompt />
     </>
   );

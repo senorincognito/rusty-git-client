@@ -74,6 +74,7 @@ the module path to be visible from the crate root.
 | `toolbar/sync.rs` | `features/toolbar` | fetch / pull / push / force push / auto-fetch / diverged pull; `run_git`, `run_git_with` |
 | `auth/mod.rs` | `features/auth` | credential prompts: `GIT_ASKPASS`/`SSH_ASKPASS` script, loopback socket, `credentials-request` event, `answer_credentials` |
 | `undo/mod.rs` | `features/toolbar/UndoButtons` | the undo journal: `recorded(path, label, kind, || op)` wraps a command, `get_undo_state`, `undo_cmd`, `redo_cmd` |
+| `gitlog/mod.rs` | `features/gitlog` | the command log: `run_git_inner` (the only place that spawns git) calls `begin`/`finish`; the last 500 calls are kept in memory and published as `git-log` events (twice per call, same `id`); `get_git_log`, `clear_git_log`. libgit2 operations run no command and are not logged |
 | `terminal/mod.rs` | `features/terminal` | PTY sessions (`portable-pty`) feeding the xterm.js panel |
 
 Modules reach each other by full path (`crate::toolbar::sync::run_git`, `crate::changes::status_of`,
@@ -84,9 +85,9 @@ Modules reach each other by full path (`crate::toolbar::sync::run_git`, `crate::
 ```
 App.tsx                    Welcome or RepoView
 api/                       one typed wrapper file per backend module
-features/welcome|repo|graph|changes|commit|rename|rebase|sidebar|toolbar|terminal/
+features/welcome|repo|graph|changes|commit|rename|rebase|sidebar|toolbar|terminal|settings|gitlog/
 components/                generic UI: ContextMenu, Modal, ResizablePanel, Section, FileBadge
-hooks/                     useLatestRequest, usePersistentState, useAutoFetch
+hooks/                     useLatestRequest, usePersistentState, useSetting (shared settings), useAutoFetch
 i18n/                      en.ts: every user-facing text; index.ts exports it as `t`, plus `fill`
 styles/                    global SCSS: tokens, mixins, base, buttons, switch, filelist, panel (see Styles)
 *.scss next to components  each component's own styles, imported by that component
@@ -108,7 +109,7 @@ styles/                    global SCSS: tokens, mixins, base, buttons, switch, f
 ### Persisted state
 
 `recent_repos.json` and `repo_folder.json` (the start screen's folder of repositories, a JSON string) in the app data dir; `localStorage` keys `sidebarWidth`, `changesWidth`,
-`autoFetch.enabled` (default true), `autoFetch.seconds` (default 180), `diff.mode` (`full` | `hunks` | `split`; falls back to the old `diff.fullFile` boolean when unset), `sectionHeight.<local|remotes|stashes>` (px), `changesSplit` (fraction).
+`autoFetch.enabled` (default true), `autoFetch.seconds` (default 180), `diff.mode` (`full` | `hunks` | `split`; falls back to the old `diff.fullFile` boolean when unset), `sectionHeight.<local|remotes|stashes>` (px), `changesSplit` (fraction), `terminal.autocomplete` (default true; the Settings dialog), `gitLog.open` (default false), `gitLog.height` (px).
 All of it is keyed by the bundle identifier `net.senorincognito.gitclient` (changed from `com.gitclient.app` in 0.2.x; the old
 app data dir and `localStorage` are not migrated, so saved settings and the recent-repos list reset once). Don't change it casually.
 
@@ -180,6 +181,7 @@ update it when a decision changes (new decisions go in the right file; split a f
 | `undo.md` | The undo journal: snapshots, `Kind`s, how to make a command undoable |
 | `changes-and-diffs.md` | Amend, working-tree diffs, stash, the Changes file menu, file history, hunks, stage/discard line(s), diff view modes and chrome |
 | `files-tab.md` | The Files sidebar tab, the file viewer and editor, blame hint, terminal references |
+| `settings.md` | The Settings dialog, `useSetting`, the terminal's branch and tag suggestions (shadow input line) |
 | `building-and-release.md` | CI jobs, the build and run scripts and their gotchas, the app icon, release notes |
 
 ## Pitfalls learned the hard way

@@ -1,0 +1,109 @@
+@use "@/styles/core" as *;
+
+// Bottom panel with the git commands the app ran. Its height is set inline (the splitter on its top edge).
+.gitlog {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  background: $bg;
+  border-top: 1px solid $border;
+  min-height: 0;
+}
+
+.gitlog-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 12px;
+  background: $panel;
+  @include section-label;
+}
+
+.gitlog-filter {
+  flex: 1;
+  min-width: 0;
+  max-width: 320px;
+  @include text-field;
+}
+
+.gitlog-empty {
+  margin: 0;
+  padding: 12px;
+  color: $muted;
+}
+
+.gitlog-list {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  font: 12px $font-code;
+
+  li.failed .gitlog-status {
+    color: $danger;
+  }
+
+  li.running .gitlog-status {
+    color: $accent;
+  }
+}
+
+.gitlog-line {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  padding: 2px 12px;
+  border: none;
+  background: transparent;
+  color: $text;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: $hover-tint;
+  }
+
+  &:disabled {
+    cursor: default;
+  }
+}
+
+.gitlog-time,
+.gitlog-repo,
+.gitlog-status {
+  flex: none;
+  color: $muted;
+}
+
+.gitlog-cmd {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  @include truncate;
+}
+
+.gitlog-repo {
+  max-width: 140px;
+  @include truncate;
+}
+
+.gitlog-status {
+  min-width: 64px;
+  text-align: right;
+}
+
+.gitlog-output {
+  margin: 0;
+  padding: 4px 12px 6px 84px;
+  max-height: 160px;
+  overflow: auto;
+  color: $muted;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: inherit;
+}

@@ -48,3 +48,31 @@
   padding: 4px 8px;
   overflow: hidden;
 }
+
+// Branch and tag suggestions under or over the cursor line (fixed: the panel and the graph above must not clip it).
+.termcomplete {
+  position: fixed;
+  z-index: 100;
+  min-width: 160px;
+  max-width: 420px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  font: 12px $font-code;
+  @include floating($shadow-menu);
+
+  li {
+    padding: 3px 8px;
+    border-radius: $radius-sm;
+    cursor: pointer;
+    @include truncate;
+
+    &:hover {
+      background: $hover-tint;
+    }
+
+    &.active {
+      background: $accent-tint;
+    }
+  }
+}
