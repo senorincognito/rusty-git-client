@@ -1,16 +1,71 @@
+pub mod agents;
+
+use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
-struct Session {
+/// How much output a session remembers to replay when a panel attaches again.
+const SCROLLBACK_BYTES: usize = 256 * 1024;
+/// Size of a session that starts before any panel exists (an agent started in the background).
+const DEFAULT_SIZE: (u16, u16) = (120, 30);
+/// What a terminal answers to the cursor-position request (`ESC[6n`) that ConPTY sends and waits on.
+const CURSOR_QUERY: &str = "\x1b[6n";
+const CURSOR_REPLY: &[u8] = b"\x1b[1;1R";
+
+static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+
+/// The output a session has produced: the tail of it for replay, and a running number so a panel that attaches can
+/// tell which live chunks the replay already contains.
+#[derive(Default)]
+struct Output {
+    chunks: VecDeque<String>,
+    len: usize,
+    seq: u64,
+}
+
+impl Output {
+    fn push(&mut self, data: String) {
+        self.len += data.len();
+        self.chunks.push_back(data);
+        while self.len > SCROLLBACK_BYTES {
+            match self.chunks.pop_front() {
+                Some(old) => self.len -= old.len(),
+                None => break,
+            }
+        }
+    }
+
+    fn replay(&self) -> String {
+        self.chunks.iter().map(String::as_str).collect()
+    }
+}
+
+/// What the session and its reader thread both see.
+struct Shared {
     id: u64,
+    out: Mutex<Output>,
+    /// Unix milliseconds of the last output.
+    last_output: AtomicU64,
+    exited: AtomicBool,
+    /// A panel shows the session: live output is sent to the frontend, and the panel answers the terminal queries.
+    attached: AtomicBool,
+}
+
+struct Session {
+    shared: Arc<Shared>,
     master: Box<dyn MasterPty + Send>,
-    writer: Box<dyn Write + Send>,
+    writer: Arc<Mutex<Box<dyn Write + Send>>>,
     child: Box<dyn Child + Send + Sync>,
+    size: (u16, u16),
+    /// The name of the agent preset started in it (None for a plain shell).
+    agent: Option<String>,
 }
 
 impl Session {
@@ -18,16 +73,44 @@ impl Session {
         let _ = self.child.kill();
         // Dropping the master closes the pseudo-terminal, which ends the reader thread.
     }
+
+    fn write(&self, data: &[u8]) -> Result<(), String> {
+        let mut w = self.writer.lock().unwrap();
+        w.write_all(data).and_then(|_| w.flush()).map_err(|e| e.to_string())
+    }
+
+    fn resize(&mut self, cols: u16, rows: u16) -> Result<(), String> {
+        let (cols, rows) = (cols.max(2), rows.max(1));
+        self.master.resize(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 }).map_err(|e| e.to_string())?;
+        self.size = (cols, rows);
+        Ok(())
+    }
+
+    /// Marks the session as shown and returns what a panel needs to catch up: the remembered output and its number.
+    /// Taken under the output lock, so every chunk is either in the replay or sent live afterwards.
+    fn attach(&self) -> (String, u64) {
+        let out = self.shared.out.lock().unwrap();
+        self.shared.attached.store(true, Ordering::SeqCst);
+        (out.replay(), out.seq)
+    }
 }
 
-/// The one terminal session of the app (it follows the open repository).
+/// The terminal sessions of the app, one per working directory. They outlive the panel that shows them (a tab switch
+/// only detaches it) and end when their tab closes, their worktree is removed, or the app exits.
 #[derive(Default)]
-pub struct Terminal(Mutex<Option<Session>>);
+pub struct Terminal(Mutex<HashMap<String, Session>>);
 
 #[derive(Serialize, Clone)]
 struct TermData {
     id: u64,
+    seq: u64,
     data: String,
+}
+
+/// What the reader thread reports; the app turns it into events.
+enum TermEvent {
+    Data(TermData),
+    Exit(u64),
 }
 
 fn shell() -> CommandBuilder {
@@ -50,13 +133,12 @@ fn shell() -> CommandBuilder {
     cmd
 }
 
-fn spawn(
-    cwd: &Path,
-    cols: u16,
-    rows: u16,
-    mut cmd: CommandBuilder,
-    id: u64,
-) -> Result<(Session, Box<dyn Read + Send>), String> {
+fn now_millis() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
+}
+
+fn spawn(cwd: &Path, cols: u16, rows: u16, mut cmd: CommandBuilder) -> Result<(Session, Box<dyn Read + Send>), String> {
+    let (cols, rows) = (cols.max(2), rows.max(1));
     let pair = native_pty_system()
         .openpty(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 })
         .map_err(|e| e.to_string())?;
@@ -65,7 +147,77 @@ fn spawn(
     drop(pair.slave);
     let reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
     let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
-    Ok((Session { id, master: pair.master, writer, child }, reader))
+    let shared = Arc::new(Shared {
+        id: NEXT_ID.fetch_add(1, Ordering::SeqCst),
+        out: Mutex::new(Output::default()),
+        last_output: AtomicU64::new(now_millis()),
+        exited: AtomicBool::new(false),
+        attached: AtomicBool::new(false),
+    });
+    let session = Session {
+        shared,
+        master: pair.master,
+        writer: Arc::new(Mutex::new(writer)),
+        child,
+        size: (cols, rows),
+        agent: None,
+    };
+    Ok((session, reader))
+}
+
+/// Starts the shell in `path` and the thread that reads its output into the scrollback.
+fn start_session(
+    path: &str,
+    cols: u16,
+    rows: u16,
+    emit: impl Fn(TermEvent) + Send + 'static,
+) -> Result<Session, String> {
+    let (session, mut reader) = spawn(Path::new(path), cols, rows, shell())?;
+    let shared = session.shared.clone();
+    let writer = session.writer.clone();
+    std::thread::spawn(move || {
+        let mut chunker = Utf8Chunker::new();
+        let mut buf = [0u8; 8192];
+        loop {
+            match reader.read(&mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => {
+                    let data = chunker.push(&buf[..n]);
+                    if data.is_empty() {
+                        continue;
+                    }
+                    // ConPTY waits for the cursor position; a panel (xterm.js) answers it, but nobody does while the
+                    // session runs without one.
+                    if data.contains(CURSOR_QUERY) && !shared.attached.load(Ordering::SeqCst) {
+                        let _ = writer.lock().unwrap().write_all(CURSOR_REPLY);
+                    }
+                    shared.last_output.store(now_millis(), Ordering::SeqCst);
+                    let mut out = shared.out.lock().unwrap();
+                    out.seq += 1;
+                    let seq = out.seq;
+                    // The query is not kept: replaying it would make the next panel answer into the shell.
+                    out.push(data.replace(CURSOR_QUERY, ""));
+                    if shared.attached.load(Ordering::SeqCst) {
+                        emit(TermEvent::Data(TermData { id: shared.id, seq, data }));
+                    }
+                }
+            }
+        }
+        shared.exited.store(true, Ordering::SeqCst);
+        emit(TermEvent::Exit(shared.id));
+    });
+    Ok(session)
+}
+
+fn emitter(app: AppHandle) -> impl Fn(TermEvent) + Send + 'static {
+    move |event| match event {
+        TermEvent::Data(d) => {
+            let _ = app.emit("term-data", d);
+        }
+        TermEvent::Exit(id) => {
+            let _ = app.emit("term-exit", id);
+        }
+    }
 }
 
 /// Turns raw bytes into text chunks, holding back an incomplete UTF-8 sequence that was
@@ -110,73 +262,147 @@ impl Utf8Chunker {
     }
 }
 
-/// Starts (or restarts) the terminal in `path`. `id` is chosen by the frontend so it can
-/// ignore output from a previous session.
+/// What a panel gets when it shows a session.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TermAttach {
+    /// Identifies the session in `term-data` / `term-exit` events (a restart gets a new one).
+    id: u64,
+    /// Live chunks numbered up to this are already in `replay`.
+    seq: u64,
+    replay: String,
+    exited: bool,
+    agent: Option<String>,
+}
+
+/// Shows the terminal of `path`: starts its shell when there is none (or when `restart` asks for a fresh one) and
+/// returns what it printed so far. The panel then receives its live output as `term-data` events until `term_detach`.
 #[tauri::command]
 pub fn term_start(
     app: AppHandle,
     state: State<Terminal>,
     path: String,
-    id: u64,
     cols: u16,
     rows: u16,
-) -> Result<(), String> {
-    let (session, mut reader) = spawn(Path::new(&path), cols.max(2), rows.max(1), shell(), id)?;
-    if let Some(old) = state.0.lock().unwrap().replace(session) {
-        old.stop();
-    }
-
-    std::thread::spawn(move || {
-        let mut chunker = Utf8Chunker::new();
-        let mut buf = [0u8; 8192];
-        loop {
-            match reader.read(&mut buf) {
-                Ok(0) | Err(_) => break,
-                Ok(n) => {
-                    let data = chunker.push(&buf[..n]);
-                    if !data.is_empty() {
-                        let _ = app.emit("term-data", TermData { id, data });
-                    }
-                }
-            }
+    restart: bool,
+) -> Result<TermAttach, String> {
+    let mut sessions = state.0.lock().unwrap();
+    if restart {
+        if let Some(old) = sessions.remove(&path) {
+            old.stop();
         }
-        let _ = app.emit("term-exit", id);
-    });
-    Ok(())
+    }
+    if !sessions.contains_key(&path) {
+        let session = start_session(&path, cols, rows, emitter(app))?;
+        sessions.insert(path.clone(), session);
+    }
+    let s = sessions.get_mut(&path).expect("just inserted");
+    if s.size != (cols.max(2), rows.max(1)) && !s.shared.exited.load(Ordering::SeqCst) {
+        s.resize(cols, rows)?;
+    }
+    let (replay, seq) = s.attach();
+    Ok(TermAttach {
+        id: s.shared.id,
+        seq,
+        replay,
+        exited: s.shared.exited.load(Ordering::SeqCst),
+        agent: s.agent.clone(),
+    })
+}
+
+/// The panel of `path` went away (another tab was selected); the session keeps running without it.
+#[tauri::command]
+pub fn term_detach(state: State<Terminal>, path: String) {
+    if let Some(s) = state.0.lock().unwrap().get(&path) {
+        s.shared.attached.store(false, Ordering::SeqCst);
+    }
 }
 
 #[tauri::command]
 pub fn term_write(state: State<Terminal>, id: u64, data: String) -> Result<(), String> {
-    match state.0.lock().unwrap().as_mut() {
-        Some(s) if s.id == id => {
-            s.writer.write_all(data.as_bytes()).and_then(|_| s.writer.flush()).map_err(|e| e.to_string())
-        }
-        _ => Ok(()), // stale session: drop the input
+    match state.0.lock().unwrap().values().find(|s| s.shared.id == id) {
+        Some(s) => s.write(data.as_bytes()),
+        None => Ok(()), // stale session: drop the input
     }
 }
 
 #[tauri::command]
 pub fn term_resize(state: State<Terminal>, id: u64, cols: u16, rows: u16) -> Result<(), String> {
-    match state.0.lock().unwrap().as_ref() {
-        Some(s) if s.id == id => s
-            .master
-            .resize(PtySize { rows: rows.max(1), cols: cols.max(2), pixel_width: 0, pixel_height: 0 })
-            .map_err(|e| e.to_string()),
-        _ => Ok(()),
+    match state.0.lock().unwrap().values_mut().find(|s| s.shared.id == id) {
+        Some(s) => s.resize(cols, rows),
+        None => Ok(()),
     }
 }
 
+/// Ends the terminal of `path` (and whatever runs in it).
 #[tauri::command]
-pub fn term_stop(state: State<Terminal>) {
-    if let Some(s) = state.0.lock().unwrap().take() {
+pub fn term_stop(state: State<Terminal>, path: String) {
+    if let Some(s) = state.0.lock().unwrap().remove(&path) {
         s.stop();
     }
+}
+
+/// Types `command` and Enter into the terminal of `path` (started without a panel when there is none) and remembers
+/// that `agent` runs there. Refused while an earlier agent session is alive: the text would go to that agent.
+#[tauri::command]
+pub fn term_run(
+    app: AppHandle,
+    state: State<Terminal>,
+    path: String,
+    command: String,
+    agent: String,
+) -> Result<(), String> {
+    let mut sessions = state.0.lock().unwrap();
+    if sessions.get(&path).is_some_and(|s| s.shared.exited.load(Ordering::SeqCst)) {
+        if let Some(old) = sessions.remove(&path) {
+            old.stop();
+        }
+    }
+    if let Some(s) = sessions.get(&path) {
+        if let Some(running) = &s.agent {
+            return Err(format!("{running} was already started in this worktree. Stop its terminal session first."));
+        }
+    } else {
+        let (cols, rows) = DEFAULT_SIZE;
+        sessions.insert(path.clone(), start_session(&path, cols, rows, emitter(app))?);
+    }
+    let s = sessions.get_mut(&path).expect("just inserted");
+    s.write(format!("{command}\r").as_bytes())?;
+    s.agent = Some(agent);
+    Ok(())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TermInfo {
+    path: String,
+    running: bool,
+    agent: Option<String>,
+    /// Milliseconds since the session last printed anything.
+    idle_ms: u64,
+}
+
+/// Every terminal session, for the status dots (cheap: nothing is read from the sessions but their counters).
+#[tauri::command]
+pub fn term_list(state: State<Terminal>) -> Vec<TermInfo> {
+    let now = now_millis();
+    state
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|(path, s)| TermInfo {
+            path: path.clone(),
+            running: !s.shared.exited.load(Ordering::SeqCst),
+            agent: s.agent.clone(),
+            idle_ms: now.saturating_sub(s.shared.last_output.load(Ordering::SeqCst)),
+        })
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::mpsc;
     use std::time::{Duration, Instant};
 
     #[test]
@@ -191,49 +417,64 @@ mod tests {
     }
 
     #[test]
-    fn shell_runs_in_the_given_directory_and_echoes_input() {
+    fn scrollback_keeps_only_the_newest_output() {
+        let mut out = Output::default();
+        let chunk = "x".repeat(SCROLLBACK_BYTES / 4);
+        for i in 0..6 {
+            out.push(format!("{i}{chunk}"));
+        }
+        let replay = out.replay();
+        assert!(replay.len() <= SCROLLBACK_BYTES + 1);
+        assert!(replay.starts_with('3') && replay.contains('5') && !replay.contains('2'));
+    }
+
+    /// A session without any panel: the reader answers ConPTY's cursor query itself, remembers the output for a
+    /// later panel (without the query), and only sends live events once one is attached.
+    #[test]
+    fn shell_runs_unattended_and_replays_its_output() {
         let dir = std::env::temp_dir().join(format!("gc-term-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
 
-        let (mut session, mut reader) = spawn(&dir, 100, 30, shell(), 1).unwrap();
-        let (tx, rx) = mpsc::channel();
-        std::thread::spawn(move || {
-            let mut buf = [0u8; 4096];
-            while let Ok(n) = reader.read(&mut buf) {
-                if n == 0 || tx.send(buf[..n].to_vec()).is_err() {
-                    break;
-                }
+        let events = Arc::new(Mutex::new(Vec::<u64>::new()));
+        let seen = events.clone();
+        let session = start_session(dir.to_str().unwrap(), 100, 30, move |e| {
+            if let TermEvent::Data(d) = e {
+                seen.lock().unwrap().push(d.seq);
             }
-        });
+        })
+        .unwrap();
 
-        // Print the working directory name and a marker built from two halves, so the
-        // marker only appears in the *output*, not in the echoed command line.
+        // The marker is built from two halves, so it only appears in the *output*, not in the echoed command line.
         let leaf = dir.file_name().unwrap().to_string_lossy().to_string();
         #[cfg(windows)]
         let cmd = "(Get-Location).Path; Write-Output ('gc-' + 'done')\r\n";
         #[cfg(not(windows))]
         let cmd = "pwd; echo gc-\"done\"\n";
-        session.writer.write_all(cmd.as_bytes()).unwrap();
-        session.writer.flush().unwrap();
+        session.write(cmd.as_bytes()).unwrap();
 
-        let mut seen = String::new();
         let deadline = Instant::now() + Duration::from_secs(20);
-        while Instant::now() < deadline && !seen.contains("gc-done") {
-            if let Ok(chunk) = rx.recv_timeout(Duration::from_millis(200)) {
-                let text = String::from_utf8_lossy(&chunk).to_string();
-                // ConPTY asks the terminal for the cursor position and waits; a real terminal
-                // (xterm.js) answers automatically, so the test must too.
-                if text.contains("\x1b[6n") {
-                    session.writer.write_all(b"\x1b[1;1R").unwrap();
-                    session.writer.flush().unwrap();
-                }
-                seen.push_str(&text);
-            }
+        let mut replay = String::new();
+        while Instant::now() < deadline && !replay.contains("gc-done") {
+            std::thread::sleep(Duration::from_millis(200));
+            replay = session.shared.out.lock().unwrap().replay();
         }
+        assert!(replay.contains("gc-done"), "no output marker; got: {replay:?}");
+        assert!(replay.contains(&leaf), "cwd not used; got: {replay:?}");
+        assert!(!replay.contains(CURSOR_QUERY), "the cursor query must not be replayed");
+        assert!(events.lock().unwrap().is_empty(), "nothing is sent while no panel is attached");
+
+        // Attaching hands over everything so far; what comes after is sent live and numbered after it.
+        let (caught_up, seq) = session.attach();
+        assert_eq!(caught_up, replay);
+        session.write(b"echo gc-more\r\n").unwrap();
+        let deadline = Instant::now() + Duration::from_secs(20);
+        while Instant::now() < deadline && events.lock().unwrap().is_empty() {
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        assert!(events.lock().unwrap().iter().all(|&s| s > seq));
+        assert!(!events.lock().unwrap().is_empty());
         session.stop();
-        assert!(seen.contains("gc-done"), "no output marker; got: {seen:?}");
-        assert!(seen.contains(&leaf), "cwd not used; got: {seen:?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

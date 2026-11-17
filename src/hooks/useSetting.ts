@@ -50,3 +50,25 @@ const isBoolean = (v: unknown): v is boolean => typeof v === "boolean";
 
 /** Whether the terminal suggests branch and tag names while a git command is typed. */
 export const useTerminalAutocomplete = () => useSetting("terminal.autocomplete", true, isBoolean);
+
+/** An agent that can be started in a worktree: a name for the menus and the command typed into its terminal. */
+export interface AgentPreset {
+  name: string;
+  command: string;
+}
+
+const EXAMPLE_AGENTS: AgentPreset[] = [
+  { name: "Claude Code", command: "claude" },
+  { name: "Codex", command: "codex" },
+  { name: "Aider", command: "aider" },
+  { name: "pi", command: "pi" },
+];
+const isAgentPresets = (v: unknown): v is AgentPreset[] =>
+  Array.isArray(v) &&
+  v.every((p) => typeof p === "object" && p !== null && typeof p.name === "string" && typeof p.command === "string");
+
+/** The agents of the "Start agent" menus, in the order shown; the first is the default. May hold unfinished rows. */
+export const useAgentPresets = () => useSetting("agents.presets", EXAMPLE_AGENTS, isAgentPresets);
+
+/** The presets that are complete enough to run. */
+export const usablePresets = (presets: AgentPreset[]) => presets.filter((p) => p.name.trim() !== "" && p.command.trim() !== "");

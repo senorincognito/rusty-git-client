@@ -314,6 +314,10 @@
 }
 
 .worktreelist li {
+  .agentdot {
+    margin-left: 2px;
+  }
+
   .wt-changes {
     flex: none;
     color: $accent;
@@ -331,5 +335,27 @@
   &.missing {
     opacity: 0.55;
     cursor: default;
+  }
+}
+
+// The "start an agent" choice of the new-worktree form.
+.wt-agentpick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+
+  label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 400;
+    color: $text;
+  }
+
+  select {
+    @include text-field;
+    width: auto;
   }
 }

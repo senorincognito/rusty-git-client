@@ -1,8 +1,10 @@
 # Terminal
 
 - Toggle a real terminal (PowerShell on Windows, your login shell on macOS) in the
-  repository folder with the **>_ Terminal** button or the Ctrl + Backquote shortcut. Resizable, keeps its
-  session while hidden, restarts when you switch repositories.
+  repository folder with the **>_ Terminal** button or the Ctrl + Backquote shortcut. Resizable. Each working directory has its own
+  session, which keeps running while the panel is hidden and while you look at another tab (a long build or an
+  agent carries on); showing it again replays what it printed. Closing the tab ends the session (after asking while an
+  agent runs in it).
 - Anything you run there (commits, checkouts, ...) shows up in the UI through live reload.
 - **Branch and tag suggestions**: while you type a git command that takes a ref (`checkout`, `switch`, `merge`,
   `rebase`, `cherry-pick`, `branch`, `diff`, `log`, `show`, `reset`, `revert`, `tag`, `push`, `pull`, `merge-base`),

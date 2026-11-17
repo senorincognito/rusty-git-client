@@ -1,4 +1,6 @@
 import type { RepoInfo } from "@/api/repo";
+import AgentDot from "@/components/AgentDot";
+import { useTerminalSessions } from "@/hooks/useTerminalSessions";
 import { t } from "@/i18n";
 import "./TabBar.scss";
 
@@ -21,39 +23,44 @@ export default function TabBar({
   onNew: () => void;
   onSettings: () => void;
 }) {
+  const sessions = useTerminalSessions();
   return (
     <div className="tabbar" role="tablist">
-      {tabs.map((tab) => (
-        <div
-          key={tab.path}
-          className={"tab" + (tab.path === active ? " active" : "")}
-          role="tab"
-          aria-selected={tab.path === active}
-          title={tab.path}
-          onClick={() => onSelect(tab.path)}
-          // Middle-click closes, like a browser.
-          onAuxClick={(e) => {
-            if (e.button === 1) {
-              e.preventDefault();
-              onClose(tab.path);
-            }
-          }}
-          onMouseDown={(e) => e.button === 1 && e.preventDefault()} // no autoscroll cursor
-        >
-          <span className="tab-name">{tab.name}</span>
-          <button
-            className="tab-close"
-            title={t.tabs.close}
-            aria-label={t.tabs.closeTab(tab.name)}
-            onClick={(e) => {
-              e.stopPropagation();
-              onClose(tab.path);
+      {tabs.map((tab) => {
+        const session = sessions.get(tab.path);
+        return (
+          <div
+            key={tab.path}
+            className={"tab" + (tab.path === active ? " active" : "")}
+            role="tab"
+            aria-selected={tab.path === active}
+            title={tab.path}
+            onClick={() => onSelect(tab.path)}
+            // Middle-click closes, like a browser.
+            onAuxClick={(e) => {
+              if (e.button === 1) {
+                e.preventDefault();
+                onClose(tab.path);
+              }
             }}
+            onMouseDown={(e) => e.button === 1 && e.preventDefault()} // no autoscroll cursor
           >
-            ×
-          </button>
-        </div>
-      ))}
+            {session?.agent && <AgentDot agent={session.agent} status={session.status} />}
+            <span className="tab-name">{tab.name}</span>
+            <button
+              className="tab-close"
+              title={t.tabs.close}
+              aria-label={t.tabs.closeTab(tab.name)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose(tab.path);
+              }}
+            >
+              ×
+            </button>
+          </div>
+        );
+      })}
       <button
         className={"tab-new" + (active === null ? " active" : "")}
         title={t.tabs.newTab}

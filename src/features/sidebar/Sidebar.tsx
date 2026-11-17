@@ -150,7 +150,7 @@ export default function Sidebar({
         <div className="sidepane" id="sidepane-branches" role="tabpanel" aria-labelledby="sidetab-branches" hidden={tab !== "branches"}>
           <LocalBranches path={path} refreshKey={refreshKey} onChanged={onChanged} onCheckout={onCheckout} filter={filter} onFastForward={onFastForward} onMerge={onMerge} onRebaseOnto={onRebaseOnto} />
           <Remotes path={path} refreshKey={refreshKey} onChanged={onChanged} onCheckout={onCheckout} fetchError={fetchError} filter={filter} onMerge={onMerge} />
-          <Worktrees path={path} refreshKey={refreshKey} filter={filter} onChanged={onChanged} onOpen={onOpenWorktree} onRemoved={onWorktreeRemoved} />
+          <Worktrees path={path} refreshKey={refreshKey} filter={filter} onChanged={onChanged} onOpen={onOpenWorktree} onRemoved={onWorktreeRemoved} onMerge={onMerge} onRebaseOnto={onRebaseOnto} />
         </div>
         <div className="sidepane" id="sidepane-stashes" role="tabpanel" aria-labelledby="sidetab-stashes" hidden={tab !== "stashes"}>
           <Stashes

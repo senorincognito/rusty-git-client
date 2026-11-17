@@ -10,6 +10,8 @@
   `TerminalPanel` that is already mounted. Add a setting as a hook next to `useTerminalAutocomplete` and a row in the
   dialog. Existing keys (`autoFetch.*`, `diff.mode`) stay where they are, with their own UI.
 
+- **Agent presets** (`useAgentPresets`, key `agents.presets`) are a list edited row by row in the dialog; every keystroke saves. Incomplete rows are kept while typing and filtered out where the presets are used (`usablePresets`). See `worktrees.md` for what they do.
+
 ## Terminal suggestions
 - The shell owns the input line, so `completion.ts` (`LineTracker`) keeps a *shadow* copy from `onData`: plain
   characters, Backspace (`\x7f`), Ctrl+U and Ctrl+C/Enter are understood; anything else (escape sequences, Tab,

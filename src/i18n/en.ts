@@ -391,6 +391,15 @@ export const en = {
       ].join("\n"),
   },
 
+  agents: {
+    status: (agent: string, status: "working" | "idle" | "exited") =>
+      status === "working"
+        ? `${agent}: working (it printed something in the last few seconds)`
+        : status === "idle"
+          ? `${agent}: quiet (finished, or waiting for you)`
+          : `${agent}: the terminal session ended`,
+  },
+
   worktrees: {
     title: "Worktrees",
     actions: "Worktree actions",
@@ -418,7 +427,40 @@ export const en = {
     removeMain: "The main working directory can't be removed",
     removeCurrent: "This is the worktree shown in this tab. Open another one first.",
     removeHint: "Delete the worktree's folder (its branch is kept)",
-    removeConfirm: (path: string) => `Remove the worktree ${path}?\n\nIts folder is deleted. The branch and its commits are kept.`,
+    removeConfirm: (path: string, running: boolean) =>
+      `Remove the worktree ${path}?\n\nIts folder is deleted. The branch and its commits are kept.${running ? "\n\nThe terminal session running in it is stopped." : ""}`,
+    startAgent: "Start agent",
+    startAgentNone: "No agents set up. Add some in Settings.",
+    startAgentHint: (command: string) => `Type "${command}" in this worktree's terminal and let it run in the background`,
+    agentNotFound: (command: string) => `"${command}" was not found on PATH. It still works if your shell knows it.`,
+    agentRunning: (agent: string) => `${agent} was started here. Stop the terminal session first to start another.`,
+    agentToggle: "Start an agent in it",
+    agentChoose: "Agent to start",
+    stopSession: "Stop terminal session",
+    stopSessionHint: "End the shell in this worktree and whatever runs in it",
+    merge: (branch: string, into: string) => `Merge ${branch} into ${into}`,
+    mergeHint: "Bring the branch's commits into the branch checked out in this tab",
+    rebase: (into: string, branch: string) => `Rebase ${into} onto ${branch}`,
+    rebaseHint: "Replay the checked-out branch of this tab on top of this worktree's branch",
+    noBranch: "This worktree has no branch (detached HEAD)",
+    tabDetached: "Check out a branch in this tab first",
+    uncommitted: (n: number) => `${n} uncommitted ${n === 1 ? "file" : "files"} in that worktree are not part of the branch yet.`,
+    finish: "Finish…",
+    finishHint: "Merge the branch into the checked-out branch, then remove the worktree and delete the branch",
+    finishDirty: "Commit or discard the changes in that worktree first",
+    finishTitle: "Finish worktree",
+    finishOk: "Merge and remove",
+    finishConfirm: (branch: string, into: string, path: string, running: boolean) =>
+      [
+        `1. Merge ${branch} into ${into}`,
+        `2. Remove the worktree ${path}${running ? " and stop its terminal session" : ""}`,
+        `3. Delete the branch ${branch}`,
+        "",
+        "Nothing is touched after step 1 if the merge stops on conflicts; you resolve those in the conflict view first.",
+      ].join("\n"),
+    finishConflicts: (branch: string) =>
+      `Merging ${branch} stopped on conflicts. Resolve them in the conflict view; the worktree and the branch are still there.`,
+    finishPartial: (error: string) => `The merge is done, but removing the worktree and the branch did not finish: ${error}`,
     removeForceConfirm: (path: string, reason: string) =>
       `${reason}\n\nRemove ${path} anyway? Uncommitted changes in it are lost for good.`,
     removeForce: "Remove anyway",
@@ -734,6 +776,9 @@ export const en = {
     close: "Close tab",
     closeTab: (name: string) => `Close ${name}`,
     newTab: "Open another repository",
+    stopAgentConfirm: (name: string, agent: string) =>
+      `${agent} was started in ${name}. Closing the tab stops its terminal session and the agent with it.`,
+    stopAgent: "Close and stop",
   },
 
   repo: {
@@ -845,6 +890,15 @@ export const en = {
     open: "Settings",
     openHint: (mod: string) => `Settings (${mod}+,)`,
     close: "Close",
+    agents: "Agents",
+    agentsHint:
+      "Agents you can start in a worktree (right-click it > Start agent). The command is typed into the worktree's terminal, so the program must be installed, on your PATH and signed in. The first agent is the default for new worktrees.",
+    agentName: "Agent name",
+    agentCommand: "Command",
+    agentMove: (dir: "up" | "down", name: string) => `Move ${name || "this agent"} ${dir}`,
+    agentRemove: (name: string) => `Remove ${name || "this agent"}`,
+    agentAdd: "Add agent",
+    agentNone: "No agents. Add one to start it from a worktree.",
     terminal: "Terminal",
     terminalAutocomplete: "Suggest branches and tags",
     terminalAutocompleteHint:

@@ -10,3 +10,28 @@
     @include section-label;
   }
 }
+
+.settings-group + .settings-group {
+  margin-top: 16px;
+}
+
+// One agent: name, command and the row's buttons.
+.agent-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  input {
+    @include text-field;
+    min-width: 0;
+  }
+
+  input:first-child {
+    flex: 0 1 130px;
+  }
+
+  input:nth-child(2) {
+    flex: 1;
+    font-family: $font-code;
+  }
+}

@@ -10,6 +10,7 @@ import { applyStash, dropStash, popStash } from "@/api/stash";
 import { cherryPick, dropLatestCommit, fastForward, getDropInfo, getRebaseOntoInfo, getResetInfo, mergeBranch, rebaseOnto, resetToCommit, revertCommit, type ResetMode } from "@/api/history";
 import { deleteFile } from "@/api/files";
 import { openRepo, type RepoInfo } from "@/api/repo";
+import { termList } from "@/api/terminal";
 import { unwatchRepo, watchRepo } from "@/api/watch";
 import GitLogPanel from "@/features/gitlog/GitLogPanel";
 import { usePersistentState } from "@/hooks/usePersistentState";
@@ -71,6 +72,14 @@ export default function RepoView({
   useEffect(() => {
     if (terminalOpen) setTerminalLoaded(true);
   }, [terminalOpen]);
+  // A worktree with an agent that was started in the background: show its terminal when the tab opens.
+  useEffect(() => {
+    termList()
+      .then((list) => {
+        if (list.some((s) => s.path === repo.path && s.agent)) setTerminalOpen(true);
+      })
+      .catch(() => {});
+  }, [repo.path]);
   // The Stash button in the title bar opens the same dialog as the one under the staging lists.
   const [stashOpen, setStashOpen] = useState(false);
   // Why the last fetch failed (shown as a warning beside "origin"), null while fetching works.

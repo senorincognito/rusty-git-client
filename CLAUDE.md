@@ -76,7 +76,8 @@ the module path to be visible from the crate root.
 | `auth/mod.rs` | `features/auth` | credential prompts: `GIT_ASKPASS`/`SSH_ASKPASS` script, loopback socket, `credentials-request` event, `answer_credentials` |
 | `undo/mod.rs` | `features/toolbar/UndoButtons` | the undo journal: `recorded(path, label, kind, || op)` wraps a command, `get_undo_state`, `undo_cmd`, `redo_cmd` |
 | `gitlog/mod.rs` | `features/gitlog` | the command log: `run_git_inner` (the only place that spawns git) calls `begin`/`finish`; the last 500 calls are kept in memory and published as `git-log` events (twice per call, same `id`); `get_git_log`, `clear_git_log`. libgit2 operations run no command and are not logged |
-| `terminal/mod.rs` | `features/terminal` | PTY sessions (`portable-pty`) feeding the xterm.js panel |
+| `terminal/mod.rs` | `features/terminal` | PTY sessions (`portable-pty`), one per working directory, owned by the backend: they outlive the panel (`term_start` attaches and replays the last 256 KB, `term_detach`, `term_stop`, `term_run` types a command into one, `term_list`); see `docs/design/worktrees.md` |
+| `terminal/agents.rs` | `features/settings`, `features/sidebar/Worktrees` | `check_agent_commands`: is an agent preset's program on PATH |
 
 Modules reach each other by full path (`crate::toolbar::sync::run_git`, `crate::changes::status_of`,
 `crate::sidebar::stash::save_stash`). Tests live in a `#[cfg(test)] mod tests` at the bottom of the file they test.
@@ -94,7 +95,7 @@ styles/                    global SCSS: tokens, mixins, base, buttons, switch, f
 *.scss next to components  each component's own styles, imported by that component
 ```
 
-**Tabs** (`features/tabs/TabBar`, state in `App`): `tabs: RepoInfo[]` plus `active` (a path, or null = start screen, which is also what "+" shows; no tab bar while there are no tabs). Only the active tab's `RepoView` is mounted (`key` = path): that is what keeps background tabs from auto-fetching, and it also keeps their watcher and the window-level key handlers (Esc, Ctrl+Z, arrows...) from firing in several repositories at once. The price is that a tab's UI state (open diff, selection, terminal session) is gone when you switch away. Opening an already open repository just activates its tab. `RepoView`'s `onRepoChange` must stay a stable callback (its watcher effect depends on it); it replaces the tab's `RepoInfo` (branch label). Open tabs are not persisted across restarts. The old "← Repositories" button is gone: the "+" tab replaces it.
+**Tabs** (`features/tabs/TabBar`, state in `App`): `tabs: RepoInfo[]` plus `active` (a path, or null = start screen, which is also what "+" shows; no tab bar while there are no tabs). Only the active tab's `RepoView` is mounted (`key` = path): that is what keeps background tabs from auto-fetching, and it also keeps their watcher and the window-level key handlers (Esc, Ctrl+Z, arrows...) from firing in several repositories at once. The price is that a tab's UI state (open diff, selection) is gone when you switch away; its terminal session is not (the backend owns it). Opening an already open repository just activates its tab. `RepoView`'s `onRepoChange` must stay a stable callback (its watcher effect depends on it); it replaces the tab's `RepoInfo` (branch label). Open tabs are not persisted across restarts. The old "← Repositories" button is gone: the "+" tab replaces it.
 
 `RepoView` owns the screen state: `graphKey`, `terminalOpen`, `selectedCommit`, `openFile` (a commit's file),
 `openWorkingFile` (a staged/unstaged file from the Changes panel), `renaming`.
@@ -110,7 +111,7 @@ styles/                    global SCSS: tokens, mixins, base, buttons, switch, f
 ### Persisted state
 
 `recent_repos.json` and `repo_folder.json` (the start screen's folder of repositories, a JSON string) in the app data dir; `localStorage` keys `sidebarWidth`, `changesWidth`,
-`autoFetch.enabled` (default true), `autoFetch.seconds` (default 180), `diff.mode` (`full` | `hunks` | `split`; falls back to the old `diff.fullFile` boolean when unset), `sectionHeight.<local|remotes|stashes>` (px), `changesSplit` (fraction), `terminal.autocomplete` (default true; the Settings dialog), `gitLog.open` (default false), `gitLog.height` (px).
+`autoFetch.enabled` (default true), `autoFetch.seconds` (default 180), `diff.mode` (`full` | `hunks` | `split`; falls back to the old `diff.fullFile` boolean when unset), `sectionHeight.<local|remotes|stashes>` (px), `changesSplit` (fraction), `terminal.autocomplete` (default true; the Settings dialog), `agents.presets` (the agents of "Start agent", `{ name, command }[]`; the Settings dialog), `gitLog.open` (default false), `gitLog.height` (px).
 All of it is keyed by the bundle identifier `net.senorincognito.gitclient` (changed from `com.gitclient.app` in 0.2.x; the old
 app data dir and `localStorage` are not migrated, so saved settings and the recent-repos list reset once). Don't change it casually.
 
@@ -179,7 +180,7 @@ update it when a decision changes (new decisions go in the right file; split a f
 | `sync-and-remotes.md` | Pull (ff-only, diverged dialog), force push, credential prompts (`GIT_ASKPASS`), fetch failures, auto-fetch, multiple remotes and the target remote |
 | `graph-and-branches.md` | Start screen, graph highlighting, checkout from the graph, remote branch checkout, branch rename, clean up merged, delete synced, the WIP row, commit search |
 | `history-rewrites.md` | Interactive rebase, rename, drop, merge and its conflict view, rebase onto, fast-forward, reset |
-| `worktrees.md` | Worktrees: where they go, branch rules, removal, the watcher in a linked worktree, what is not built |
+| `worktrees.md` | Worktrees: where they go, branch rules, removal, the watcher, agents (terminal sessions owned by the backend, presets, status dots, merge back) |
 | `undo.md` | The undo journal: snapshots, `Kind`s, how to make a command undoable |
 | `changes-and-diffs.md` | Amend, working-tree diffs, stash, the Changes file menu, file history, hunks, stage/discard line(s), diff view modes and chrome |
 | `files-tab.md` | The Files sidebar tab, the file viewer and editor, blame hint, terminal references |
@@ -221,7 +222,7 @@ update it when a decision changes (new decisions go in the right file; split a f
 
 **Windows**
 - ConPTY asks the terminal for the cursor position (`ESC[6n`) and waits for the answer. xterm.js replies
-  automatically; terminal tests must reply `ESC[1;1R` themselves.
+  automatically. A session without a panel has nobody to answer: the reader thread does (`terminal/mod.rs`), and strips the query from the output kept for replay.
 - `canonicalize()` yields `\\?\` paths; strip the prefix before showing/storing them.
 - Spawned git processes use `CREATE_NO_WINDOW`. Git config has `core.autocrlf=input`; CRLF warnings on
   commit are harmless.

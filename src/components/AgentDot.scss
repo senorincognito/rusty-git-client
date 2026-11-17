@@ -1,0 +1,23 @@
+@use "@/styles/core" as *;
+
+.agentdot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: $muted;
+
+  &.working {
+    background: $accent;
+    box-shadow: 0 0 0 2px rgba(63, 167, 160, 0.3);
+  }
+
+  &.idle {
+    background: $warn;
+  }
+
+  &.exited {
+    background: $muted;
+    opacity: 0.5;
+  }
+}

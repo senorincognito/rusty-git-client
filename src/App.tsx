@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
+import { confirmDialog } from "@/api/dialog";
 import type { RepoInfo } from "@/api/repo";
+import { termList, termStop } from "@/api/terminal";
 import CredentialPrompt from "@/features/auth/CredentialPrompt";
 import RepoView from "@/features/repo/RepoView";
 import SettingsDialog from "@/features/settings/SettingsDialog";
 import TabBar from "@/features/tabs/TabBar";
 import Welcome from "@/features/welcome/Welcome";
+import { t } from "@/i18n";
 import "./styles/main.scss";
 
 const isMac = /Mac/.test(navigator.userAgent);
@@ -27,7 +30,14 @@ function App() {
     setTabs((prev) => prev.map((r) => (r.path === repo.path ? repo : r)));
   }, []);
 
-  const closeTab = (path: string) => {
+  const closeTab = async (path: string) => {
+    // The terminal of a closed tab ends with it; an agent in it is only stopped after the user agrees.
+    const session = (await termList().catch(() => [])).find((s) => s.path === path);
+    if (session?.agent && session.running) {
+      const name = tabs.find((r) => r.path === path)?.name ?? path;
+      if (!(await confirmDialog(t.tabs.stopAgentConfirm(name, session.agent), t.tabs.close, true, t.tabs.stopAgent))) return;
+    }
+    termStop(path).catch(() => {});
     const i = tabs.findIndex((r) => r.path === path);
     const rest = tabs.filter((r) => r.path !== path);
     setTabs(rest);

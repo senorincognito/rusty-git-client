@@ -6,14 +6,13 @@ import "@xterm/xterm/css/xterm.css";
 import { getLocalBranches } from "@/api/branches";
 import { getTags } from "@/api/graph";
 import { getRemotes } from "@/api/remotes";
-import { termResize, termStart, termStop, termWrite } from "@/api/terminal";
+import { termDetach, termResize, termStart, termWrite } from "@/api/terminal";
 import { useTerminalAutocomplete } from "@/hooks/useSetting";
 import { t as text } from "@/i18n";
 import { completionContext, insertion, LineTracker, rankSuggestions } from "./completion";
 import "./TerminalPanel.scss";
 
 const MIN_H = 120;
-let nextSessionId = Date.now();
 
 /** The suggestion list, placed in viewport pixels: above the cursor line when there is room, else below it. */
 interface Popup {
@@ -27,8 +26,8 @@ interface Popup {
 }
 
 /**
- * Bottom panel with a real shell in the repository folder. It stays mounted while hidden so
- * the session (and its scrollback) survives toggling; it restarts when the repo changes.
+ * Bottom panel with a real shell in the repository folder. The shell belongs to the backend, which keeps it (and its
+ * output) running while this panel is hidden or its tab is not the active one; the panel shows it again by replay.
  */
 export default function TerminalPanel({
   path,
@@ -49,6 +48,12 @@ export default function TerminalPanel({
   const term = useRef<XTerm | null>(null);
   const fit = useRef<FitAddon | null>(null);
   const session = useRef(0);
+  // Output that arrives while a session is being attached is held back, then written after the replay it follows.
+  const attaching = useRef(false);
+  const pending = useRef<{ id: number; seq: number; data: string }[]>([]);
+  const pendingExit = useRef<number | null>(null);
+  // The replay can make the emulator answer terminal queries; those answers must not reach the shell.
+  const replaying = useRef(false);
   const started = useRef(false);
   const exited = useRef(false);
   const sessionReady = useRef(false);
@@ -83,14 +88,18 @@ export default function TerminalPanel({
     t.focus();
   }, []);
 
-  const start = useCallback(async () => {
+  // Shows the session of this folder: the backend keeps it (and its output) while the panel is away, so a tab switch
+  // or a background agent is picked up again from its replay. `restart` replaces an exited session with a new shell.
+  const start = useCallback(async (restart = false) => {
     const t = term.current;
     if (!t) return;
     exited.current = false;
     sessionReady.current = false;
     tracker.current.reset();
-    const id = ++nextSessionId;
-    session.current = id;
+    session.current = 0;
+    attaching.current = true;
+    pending.current = [];
+    pendingExit.current = null;
     t.reset();
     try {
       fit.current?.fit();
@@ -98,10 +107,31 @@ export default function TerminalPanel({
       /* host not measurable yet */
     }
     try {
-      await termStart(pathRef.current, id, t.cols, t.rows);
-      sessionReady.current = true;
-      flush();
+      const res = await termStart(pathRef.current, t.cols, t.rows, restart);
+      if (term.current !== t) return; // the panel was closed meanwhile
+      session.current = res.id;
+      replaying.current = true;
+      t.write(res.replay, () => {
+        replaying.current = false;
+      });
+      for (const chunk of pending.current) if (chunk.id === res.id && chunk.seq > res.seq) t.write(chunk.data);
+      exited.current = res.exited || pendingExit.current === res.id;
+      attaching.current = false;
+      pending.current = [];
+      if (exited.current) {
+        t.write("\r\n\x1b[2m[Process exited. Press any key to restart]\x1b[0m\r\n");
+      } else {
+        sessionReady.current = true;
+        flush();
+        // A full-screen agent redraws on a size change: nudge it so the replay is replaced by its real screen.
+        if (res.agent && res.replay) {
+          termResize(res.id, t.cols + 1, t.rows)
+            .then(() => termResize(res.id, t.cols, t.rows))
+            .catch(() => {});
+        }
+      }
     } catch (e) {
+      attaching.current = false;
       exited.current = true;
       queued.current = null;
       t.write(text.terminal.startFailed(String(e)));
@@ -232,8 +262,9 @@ export default function TerminalPanel({
     });
 
     t.onData((data) => {
+      if (replaying.current) return;
       if (exited.current) {
-        start();
+        start(true);
       } else {
         termWrite(session.current, data).catch(() => {});
         tracker.current.feed(data);
@@ -244,11 +275,13 @@ export default function TerminalPanel({
     let disposed = false;
     const unlisten: (() => void)[] = [];
     Promise.all([
-      listen<{ id: number; data: string }>("term-data", (e) => {
-        if (e.payload.id === session.current) t.write(e.payload.data);
+      listen<{ id: number; seq: number; data: string }>("term-data", (e) => {
+        if (attaching.current) pending.current.push(e.payload);
+        else if (e.payload.id === session.current) t.write(e.payload.data);
       }),
       listen<number>("term-exit", (e) => {
-        if (e.payload === session.current) {
+        if (attaching.current) pendingExit.current = e.payload;
+        else if (e.payload === session.current) {
           exited.current = true;
           t.write("\r\n\x1b[2m[Process exited. Press any key to restart]\x1b[0m\r\n");
         }
@@ -282,7 +315,8 @@ export default function TerminalPanel({
       fit.current = null;
       started.current = false;
       setReady(false);
-      termStop().catch(() => {});
+      // The session keeps running: an agent must survive switching to another tab.
+      termDetach(pathRef.current).catch(() => {});
     };
   }, [start, setPopup]);
 
@@ -315,7 +349,7 @@ export default function TerminalPanel({
   useEffect(() => {
     if (!paste) return;
     queued.current = paste.text;
-    if (exited.current) start();
+    if (exited.current) start(true);
     else flush();
   }, [paste, start, flush]);
 
