@@ -76,7 +76,7 @@ the module path to be visible from the crate root.
 | `auth/mod.rs` | `features/auth` | credential prompts: `GIT_ASKPASS`/`SSH_ASKPASS` script, loopback socket, `credentials-request` event, `answer_credentials` |
 | `undo/mod.rs` | `features/toolbar/UndoButtons` | the undo journal: `recorded(path, label, kind, || op)` wraps a command, `get_undo_state`, `undo_cmd`, `redo_cmd` |
 | `gitlog/mod.rs` | `features/gitlog` | the command log: `run_git_inner` (the only place that spawns git) calls `begin`/`finish`; the last 500 calls are kept in memory and published as `git-log` events (twice per call, same `id`); `get_git_log`, `clear_git_log`. libgit2 operations run no command and are not logged |
-| `terminal/mod.rs` | `features/terminal` | PTY sessions (`portable-pty`), one per working directory, owned by the backend: they outlive the panel (`term_start` attaches and replays the last 256 KB, `term_detach`, `term_stop`, `term_run` types a command into one, `term_list`); see `docs/design/worktrees.md` |
+| `terminal/mod.rs` | `features/terminal` | PTY sessions (`portable-pty`), one per working directory, owned by the backend: they outlive the panel (`term_start` attaches and replays the last 256 KB, `term_detach`, `term_stop`, `term_run` types a command into one, `term_list`, which also tells whether an agent's program is still a child of the shell: `sysinfo`); see `docs/design/worktrees.md` |
 | `terminal/agents.rs` | `features/settings`, `features/sidebar/Worktrees` | `check_agent_commands`: is an agent preset's program on PATH |
 
 Modules reach each other by full path (`crate::toolbar::sync::run_git`, `crate::changes::status_of`,

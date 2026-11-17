@@ -392,12 +392,14 @@ export const en = {
   },
 
   agents: {
-    status: (agent: string, status: "working" | "idle" | "exited") =>
+    status: (agent: string, status: "working" | "idle" | "done" | "exited") =>
       status === "working"
         ? `${agent}: working (it printed something in the last few seconds)`
         : status === "idle"
-          ? `${agent}: quiet (finished, or waiting for you)`
-          : `${agent}: the terminal session ended`,
+          ? `${agent}: quiet (still running, but printing nothing: maybe waiting for you)`
+          : status === "done"
+            ? `${agent}: finished (the program ended, the terminal is still open)`
+            : `${agent}: the terminal session ended`,
   },
 
   worktrees: {

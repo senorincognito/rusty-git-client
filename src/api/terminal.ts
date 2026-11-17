@@ -19,6 +19,8 @@ export interface TermInfo {
   path: string;
   running: boolean;
   agent: string | null;
+  /** The agent's program has ended and the shell is back at its prompt. */
+  finished: boolean;
   /** Milliseconds since it last printed anything. */
   idleMs: number;
 }

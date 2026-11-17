@@ -1,8 +1,11 @@
 import { useSyncExternalStore } from "react";
 import { termList } from "@/api/terminal";
 
-/** What an agent session is doing, judged only by its output (it doesn't understand the agent). */
-export type AgentStatus = "working" | "idle" | "exited";
+/**
+ * What an agent session is doing: *working* / *idle* are judged by its output alone (it doesn't understand the agent),
+ * *done* by the agent's program having ended while the shell stays open, *exited* by the whole session having ended.
+ */
+export type AgentStatus = "working" | "idle" | "done" | "exited";
 
 export interface SessionState {
   path: string;
@@ -30,7 +33,7 @@ export async function refreshTerminalSessions() {
       path: s.path,
       agent: s.agent,
       running: s.running,
-      status: !s.running ? "exited" : s.idleMs < WORKING_MS ? "working" : "idle",
+      status: !s.running ? "exited" : s.finished ? "done" : s.idleMs < WORKING_MS ? "working" : "idle",
     }));
     // The status, not the raw idle time, is compared: the components only re-render when a dot would change.
     const sig = JSON.stringify(next);

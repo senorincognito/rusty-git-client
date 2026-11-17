@@ -9,6 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
+use sysinfo::{Pid, ProcessesToUpdate, System};
 use tauri::{AppHandle, Emitter, State};
 
 /// How much output a session remembers to replay when a panel attaches again.
@@ -66,9 +67,43 @@ struct Session {
     size: (u16, u16),
     /// The name of the agent preset started in it (None for a plain shell).
     agent: Option<String>,
+    /// A program has been seen running (as a child process of the shell) since the agent was started.
+    agent_seen: bool,
+    /// How many looks in a row found the shell without a child process.
+    no_child_looks: u8,
+    /// The program has ended and the shell is back at its prompt (see `FINISHED_AFTER_LOOKS`). Not final: a new
+    /// child process (the agent starting after a slow profile, a second command) makes it false again.
+    agent_finished: bool,
 }
 
+/// A shell that had a child process and shows none for this many looks in a row counts as finished. One look is not
+/// enough: a profile that starts helpers (conda, starship) runs them before the typed command, and the moment
+/// between those and the agent must not read as the agent having ended.
+const FINISHED_AFTER_LOOKS: u8 = 2;
+
 impl Session {
+    /// Whether the shell has a child process: a program (the agent, a build, ...) is running in it.
+    fn has_child(&self, system: &System) -> bool {
+        let Some(shell) = self.child.process_id() else { return false };
+        let shell = Pid::from_u32(shell);
+        system.processes().values().any(|p| p.parent() == Some(shell))
+    }
+
+    /// Learns from the process list whether the agent has started and ended. Call after refreshing `system`.
+    fn update_agent_state(&mut self, system: &System) {
+        if self.agent.is_none() {
+            return;
+        }
+        if self.has_child(system) {
+            self.agent_seen = true;
+            self.no_child_looks = 0;
+            self.agent_finished = false;
+        } else if self.agent_seen {
+            self.no_child_looks = self.no_child_looks.saturating_add(1);
+            self.agent_finished = self.no_child_looks >= FINISHED_AFTER_LOOKS;
+        }
+    }
+
     fn stop(mut self) {
         let _ = self.child.kill();
         // Dropping the master closes the pseudo-terminal, which ends the reader thread.
@@ -96,9 +131,29 @@ impl Session {
 }
 
 /// The terminal sessions of the app, one per working directory. They outlive the panel that shows them (a tab switch
-/// only detaches it) and end when their tab closes, their worktree is removed, or the app exits.
-#[derive(Default)]
-pub struct Terminal(Mutex<HashMap<String, Session>>);
+/// only detaches it) and end when their tab closes, their worktree is removed, or the app exits. The second field is
+/// the process list, kept between calls so refreshing it stays cheap (None when the system refuses to give one: agents
+/// are then never marked finished).
+pub struct Terminal(Mutex<HashMap<String, Session>>, Mutex<Option<System>>);
+
+impl Default for Terminal {
+    fn default() -> Self {
+        Self(Mutex::default(), Mutex::new(System::new().ok()))
+    }
+}
+
+/// Looks at the running processes (only while some session has an agent) and updates what each agent is doing.
+fn refresh_agents(sessions: &mut HashMap<String, Session>, system: &Mutex<Option<System>>) {
+    if !sessions.values().any(|s| s.agent.is_some()) {
+        return;
+    }
+    let mut guard = system.lock().unwrap();
+    let Some(system) = guard.as_mut() else { return };
+    system.refresh_processes(ProcessesToUpdate::All, true);
+    for s in sessions.values_mut() {
+        s.update_agent_state(&system);
+    }
+}
 
 #[derive(Serialize, Clone)]
 struct TermData {
@@ -161,6 +216,9 @@ fn spawn(cwd: &Path, cols: u16, rows: u16, mut cmd: CommandBuilder) -> Result<(S
         child,
         size: (cols, rows),
         agent: None,
+        agent_seen: false,
+        no_child_looks: 0,
+        agent_finished: false,
     };
     Ok((session, reader))
 }
@@ -358,8 +416,9 @@ pub fn term_run(
             old.stop();
         }
     }
+    refresh_agents(&mut sessions, &state.1);
     if let Some(s) = sessions.get(&path) {
-        if let Some(running) = &s.agent {
+        if let (Some(running), false) = (&s.agent, s.agent_finished) {
             return Err(format!("{running} was already started in this worktree. Stop its terminal session first."));
         }
     } else {
@@ -369,6 +428,9 @@ pub fn term_run(
     let s = sessions.get_mut(&path).expect("just inserted");
     s.write(format!("{command}\r").as_bytes())?;
     s.agent = Some(agent);
+    s.agent_seen = false;
+    s.no_child_looks = 0;
+    s.agent_finished = false;
     Ok(())
 }
 
@@ -378,23 +440,25 @@ pub struct TermInfo {
     path: String,
     running: bool,
     agent: Option<String>,
+    /// The agent's program has ended and the shell is back at its prompt.
+    finished: bool,
     /// Milliseconds since the session last printed anything.
     idle_ms: u64,
 }
 
-/// Every terminal session, for the status dots (cheap: nothing is read from the sessions but their counters).
+/// Every terminal session, for the status dots (cheap: the process list is only read while an agent is running).
 #[tauri::command]
 pub fn term_list(state: State<Terminal>) -> Vec<TermInfo> {
     let now = now_millis();
-    state
-        .0
-        .lock()
-        .unwrap()
+    let mut sessions = state.0.lock().unwrap();
+    refresh_agents(&mut sessions, &state.1);
+    sessions
         .iter()
         .map(|(path, s)| TermInfo {
             path: path.clone(),
             running: !s.shared.exited.load(Ordering::SeqCst),
             agent: s.agent.clone(),
+            finished: s.agent_finished,
             idle_ms: now.saturating_sub(s.shared.last_output.load(Ordering::SeqCst)),
         })
         .collect()
@@ -426,6 +490,67 @@ mod tests {
         let replay = out.replay();
         assert!(replay.len() <= SCROLLBACK_BYTES + 1);
         assert!(replay.starts_with('3') && replay.contains('5') && !replay.contains('2'));
+    }
+
+    /// The agent counts as finished once its program has been seen as a child of the shell and is gone again, not
+    /// before it started (the moment between typing the command and the program appearing).
+    #[test]
+    fn notices_when_the_program_in_the_shell_ends() {
+        let dir = std::env::temp_dir().join(format!("gc-term-agent-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut session = start_session(dir.to_str().unwrap(), 100, 30, |_| {}).unwrap();
+        session.agent = Some("test".into());
+        let mut system = System::new().unwrap();
+
+        // Looks at the processes until `done` holds (or 30 s pass).
+        fn watch(session: &mut Session, system: &mut System, done: fn(&Session) -> bool) {
+            let deadline = Instant::now() + Duration::from_secs(30);
+            while Instant::now() < deadline && !done(session) {
+                std::thread::sleep(Duration::from_millis(200));
+                system.refresh_processes(ProcessesToUpdate::All, true);
+                session.update_agent_state(system);
+            }
+        }
+
+        // Nothing runs in the fresh shell yet, so it is not an agent that has finished.
+        std::thread::sleep(Duration::from_secs(2));
+        system.refresh_processes(ProcessesToUpdate::All, true);
+        session.update_agent_state(&system);
+        assert!(!session.agent_finished, "an agent that never started is not finished");
+
+        // A program that runs for a few seconds, like an agent would.
+        #[cfg(windows)]
+        let cmd = "ping -n 6 127.0.0.1 > $null\r\n";
+        #[cfg(not(windows))]
+        let cmd = "sleep 5\r\n";
+        session.write(cmd.as_bytes()).unwrap();
+
+        watch(&mut session, &mut system, |s| s.agent_seen);
+        if !session.agent_seen {
+            // What the failure needs: the pid the session reports, who its children are, and what the shell printed.
+            let shell = session.child.process_id();
+            let interesting: Vec<String> = system
+                .processes()
+                .values()
+                .filter(|p| {
+                    let name = p.name().to_string_lossy().to_lowercase();
+                    p.parent().map(|pp| pp.as_u32()) == shell
+                        || ["ping", "cmd", "sleep", "powershell", "conhost", "openconsole"]
+                            .iter()
+                            .any(|n| name.contains(n))
+                })
+                .map(|p| format!("{} {:?} parent={:?}", p.pid().as_u32(), p.name(), p.parent().map(|pp| pp.as_u32())))
+                .collect();
+            let tail: String = session.shared.out.lock().unwrap().replay().chars().rev().take(400).collect();
+            let tail: String = tail.chars().rev().collect();
+            panic!("the program was never seen as a child of the shell (pid {shell:?})\nprocesses: {interesting:#?}\noutput tail: {tail:?}");
+        }
+        assert!(!session.agent_finished);
+        watch(&mut session, &mut system, |s| s.agent_finished);
+        assert!(session.agent_finished, "the program ended but the session is not marked finished");
+        session.stop();
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// A session without any panel: the reader answers ConPTY's cursor query itself, remembers the output for a

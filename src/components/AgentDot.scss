@@ -16,6 +16,10 @@
     background: $warn;
   }
 
+  &.done {
+    background: $added;
+  }
+
   &.exited {
     background: $muted;
     opacity: 0.5;

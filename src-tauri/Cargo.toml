@@ -26,6 +26,7 @@ git2 = "0.21.0"
 tauri-plugin-dialog = "2"
 notify-debouncer-mini = "0.7.0"
 portable-pty = "0.9.0"
+sysinfo = { version = "0.40.4", default-features = false, features = ["system"] }
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
