@@ -14,6 +14,7 @@ The details live in one file per area under [docs/features/](docs/features/).
 - [Merge, rebase, fast-forward, drop and reset](docs/features/history-operations.md): Single-step operations that move or rewrite the checked-out branch.
 - [Undo and Redo](docs/features/undo-redo.md): What the Undo / Redo buttons take back and when they refuse.
 - [Branches and remotes (left panel)](docs/features/branches-and-remotes.md): Local branches, clean-up, remotes, the filter and branch / remote context menus.
+- [Worktrees](docs/features/worktrees.md): Extra working directories with their own branch, opened as tabs.
 - [Files](docs/features/files.md): Browsing every file of the working directory in a folder tree and reading its content.
 - [Fetch, pull and push](docs/features/sync.md): The sync buttons, diverged branches, force push, auto-fetch and sign-in prompts.
 - [Terminal](docs/features/terminal.md): The built-in terminal panel, with branch and tag suggestions.
@@ -42,6 +43,7 @@ Esc leaves text fields and the terminal alone, so it never interferes with typin
 
 ## Not yet implemented
 
+- Worktrees: marking a branch that is checked out in one, per-worktree change badges, starting an agent in one, merging one back
 - Pushing tags
 - Unstaging a single line (staging and discarding one are built)
 - Conflict resolution for rebases, cherry-pick and revert (only merges, and pulls that merge, stop for the conflict view; the others are cancelled)

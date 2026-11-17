@@ -10,6 +10,7 @@ const READS: Record<string, Panel> = {
   get_local_branches: "sidebar",
   get_remotes: "sidebar",
   get_stashes: "sidebar",
+  get_worktrees: "sidebar",
   get_tags: "sidebar",
   get_files: "sidebar",
   get_status: "right",

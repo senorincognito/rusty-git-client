@@ -303,3 +303,26 @@
   display: flex;
   gap: 8px;
 }
+
+// ---- Worktrees ----
+.worktreelist li {
+  .wt-folder {
+    flex: 0 1 40%;
+    min-width: 0;
+    @include truncate;
+    color: $muted;
+    font-size: 11px;
+  }
+
+  .wt-badge {
+    flex: none;
+    color: $muted;
+    font-size: 10px;
+    text-transform: uppercase;
+  }
+
+  &.missing {
+    opacity: 0.55;
+    cursor: default;
+  }
+}

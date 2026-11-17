@@ -70,7 +70,7 @@ function App() {
             onSettings={() => setSettingsOpen(true)}
           />
         )}
-        {current ? <RepoView key={current.path} repo={current} onRepoChange={updateTab} /> : <Welcome onOpen={openTab} onSettings={() => setSettingsOpen(true)} />}
+        {current ? <RepoView key={current.path} repo={current} onRepoChange={updateTab} onOpenRepo={openTab} onCloseRepo={closeTab} /> : <Welcome onOpen={openTab} onSettings={() => setSettingsOpen(true)} />}
       </div>
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
       <CredentialPrompt />

@@ -28,8 +28,9 @@ pub fn watch_repo(app: AppHandle, state: State<RepoWatcher>, path: String) -> Re
     let w = debouncer.watcher();
     // HEAD, index, packed-refs, MERGE_HEAD, ...
     w.watch(&git_dir, RecursiveMode::NonRecursive).map_err(|e| e.to_string())?;
-    // Branches, remotes and tags (the folder may be missing in a brand-new repo).
-    let refs = git_dir.join("refs");
+    // Branches, remotes and tags (the folder may be missing in a brand-new repo). A linked worktree's git directory
+    // (`.git/worktrees/<name>`) holds only its own HEAD and index; the refs are shared in the common directory.
+    let refs = repo.commondir().join("refs");
     if refs.exists() {
         w.watch(&refs, RecursiveMode::Recursive).map_err(|e| e.to_string())?;
     }

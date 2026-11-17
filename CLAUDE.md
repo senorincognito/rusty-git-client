@@ -70,6 +70,7 @@ the module path to be visible from the crate root.
 | `sidebar/branches.rs` | `features/sidebar` | list, create+checkout, checkout, delete, rename (local) |
 | `sidebar/cleanup.rs` | `features/sidebar` | "Clean up merged": `get_merged_branches(path, remote)`, `delete_merged_local` (one undo step), `delete_merged_remote` (`git push <remote> --delete`, not undoable) |
 | `sidebar/remotes.rs` | `features/sidebar` | `get_remotes` (every remote with branches, `isTarget`, tracking count), `add_remote_cmd`, `set_remote_url_cmd`, `delete_remote_cmd`, `set_target_remote`; delete/rename remote branches take a `remote` argument |
+| `sidebar/worktrees.rs` | `features/sidebar/Worktrees` | `get_worktrees` (`git worktree list --porcelain`, main first), `add_worktree_cmd` (existing branch as is, else `-b` from HEAD; folder `<repo>.worktrees/<branch>`), `remove_worktree_cmd` (`force` for dirty ones), `prune_worktrees_cmd`. System git, outside the undo journal. A linked worktree opens as a normal tab; its `.git` is a file, see the watcher note in `docs/design/worktrees.md` |
 | `sidebar/stash.rs` | `features/sidebar`, `features/changes` | `get_stashes`, `create_stash` (stashes everything incl. untracked), `stash_paths_cmd` (selected files, via system git), `pop_stash_cmd`, `apply_stash_cmd`, `drop_stash_cmd`, `drop_all_stashes_cmd`; helpers `stash_index_of`, `untracked_tree` |
 | `toolbar/sync.rs` | `features/toolbar` | fetch / pull / push / force push / auto-fetch / diverged pull; `run_git`, `run_git_with` |
 | `auth/mod.rs` | `features/auth` | credential prompts: `GIT_ASKPASS`/`SSH_ASKPASS` script, loopback socket, `credentials-request` event, `answer_credentials` |
@@ -178,6 +179,7 @@ update it when a decision changes (new decisions go in the right file; split a f
 | `sync-and-remotes.md` | Pull (ff-only, diverged dialog), force push, credential prompts (`GIT_ASKPASS`), fetch failures, auto-fetch, multiple remotes and the target remote |
 | `graph-and-branches.md` | Start screen, graph highlighting, checkout from the graph, remote branch checkout, branch rename, clean up merged, delete synced, the WIP row, commit search |
 | `history-rewrites.md` | Interactive rebase, rename, drop, merge and its conflict view, rebase onto, fast-forward, reset |
+| `worktrees.md` | Worktrees: where they go, branch rules, removal, the watcher in a linked worktree, what is not built |
 | `undo.md` | The undo journal: snapshots, `Kind`s, how to make a command undoable |
 | `changes-and-diffs.md` | Amend, working-tree diffs, stash, the Changes file menu, file history, hunks, stage/discard line(s), diff view modes and chrome |
 | `files-tab.md` | The Files sidebar tab, the file viewer and editor, blame hint, terminal references |

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { RefLabel } from "@/api/graph";
+import type { RepoInfo } from "@/api/repo";
 import BusyBar from "@/components/BusyBar";
 import ResizablePanel from "@/components/ResizablePanel";
 import { t } from "@/i18n";
@@ -8,6 +9,7 @@ import LocalBranches from "./LocalBranches";
 import Remotes from "./Remotes";
 import Stashes from "./Stashes";
 import Tags from "./Tags";
+import Worktrees from "./Worktrees";
 import "./Sidebar.scss";
 
 const TABS = ["branches", "stashes", "tags", "files"] as const;
@@ -38,6 +40,8 @@ export default function Sidebar({
   onMerge,
   onRebaseOnto,
   onDeleteTag,
+  onOpenWorktree,
+  onWorktreeRemoved,
 }: {
   path: string;
   /** The open tab; RepoView owns it because the Files tab changes the rest of the screen. */
@@ -79,6 +83,10 @@ export default function Sidebar({
   onRebaseOnto: (target: string, source: string) => void;
   /** Delete a tag by name (RepoView confirms). */
   onDeleteTag: (name: string) => void;
+  /** Open a worktree as a tab. */
+  onOpenWorktree: (repo: RepoInfo) => void;
+  /** A worktree was removed, so its tab (if open) can close. */
+  onWorktreeRemoved: (path: string) => void;
 }) {
   // One filter for every list below: local branches, remote branches, stashes and tags.
   const [filter, setFilter] = useState("");
@@ -142,6 +150,7 @@ export default function Sidebar({
         <div className="sidepane" id="sidepane-branches" role="tabpanel" aria-labelledby="sidetab-branches" hidden={tab !== "branches"}>
           <LocalBranches path={path} refreshKey={refreshKey} onChanged={onChanged} onCheckout={onCheckout} filter={filter} onFastForward={onFastForward} onMerge={onMerge} onRebaseOnto={onRebaseOnto} />
           <Remotes path={path} refreshKey={refreshKey} onChanged={onChanged} onCheckout={onCheckout} fetchError={fetchError} filter={filter} onMerge={onMerge} />
+          <Worktrees path={path} refreshKey={refreshKey} filter={filter} onChanged={onChanged} onOpen={onOpenWorktree} onRemoved={onWorktreeRemoved} />
         </div>
         <div className="sidepane" id="sidepane-stashes" role="tabpanel" aria-labelledby="sidetab-stashes" hidden={tab !== "stashes"}>
           <Stashes

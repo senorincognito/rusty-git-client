@@ -49,4 +49,6 @@
   branches that tracked it at the new name. Deleting a branch also asks first, and warns when
   commits would exist nowhere else; remote deletion runs `git push origin --delete`.
 
+Worktrees (a second working directory with its own branch) have their own section under Remotes: see [Worktrees](worktrees.md).
+
 Back to the [feature index](../../FEATURES.md).

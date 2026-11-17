@@ -44,9 +44,15 @@ const isMac = /Mac/.test(navigator.userAgent);
 export default function RepoView({
   repo,
   onRepoChange,
+  onOpenRepo,
+  onCloseRepo,
 }: {
   repo: RepoInfo;
   onRepoChange: (repo: RepoInfo) => void;
+  /** Open another repository (a worktree of this one) as a tab. */
+  onOpenRepo: (repo: RepoInfo) => void;
+  /** Close the tab of a repository that no longer exists (a removed worktree). */
+  onCloseRepo: (path: string) => void;
 }) {
   const [graphKey, setGraphKey] = useState(0);
   const [terminalOpen, setTerminalOpen] = useState(false);
@@ -497,6 +503,8 @@ export default function RepoView({
               onMerge={mergeInto}
               onRebaseOnto={rebaseOntoBranch}
               onDeleteTag={deleteTagByName}
+              onOpenWorktree={onOpenRepo}
+              onWorktreeRemoved={onCloseRepo}
               onStashApplied={reload}
               onAllStashesDropped={(ids) => {
                 if (selectedCommit && ids.includes(selectedCommit.id)) closeCommit();
