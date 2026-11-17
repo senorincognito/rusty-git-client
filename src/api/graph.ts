@@ -4,6 +4,8 @@ export interface RefLabel {
   name: string;
   kind: "branch" | "remote" | "tag" | "stash";
   isHead: boolean;
+  /** A branch that another worktree has checked out: that worktree's path. */
+  worktree?: string;
 }
 
 export interface Edge {

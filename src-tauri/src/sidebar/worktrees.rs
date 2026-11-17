@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::Path;
 
 use git2::{BranchType, Repository};
@@ -151,6 +152,68 @@ fn remove_worktree(path: &str, worktree: &str, force: bool) -> Result<(), String
     run_git(path, &args).map(|_| ())
 }
 
+/// The branches that another working directory of the repository has checked out, with that directory's path. A
+/// branch can only be checked out once, and libgit2's `set_head` doesn't check, so every command that moves, renames
+/// or deletes a branch asks this first. Read with git2 (no process), because the graph needs it on every load.
+pub(crate) fn branches_held_elsewhere(repo: &Repository) -> HashMap<String, String> {
+    let here = repo.workdir().map(|w| normalize(&w.to_string_lossy()));
+    let mut held = HashMap::new();
+    let Ok(main) = Repository::open(repo.commondir()) else { return held };
+    let mut others = Vec::new();
+    if let Ok(names) = main.worktrees() {
+        for name in names.iter().flatten().flatten() {
+            let linked = main.find_worktree(name).and_then(|w| Repository::open_from_worktree(&w));
+            others.extend(linked.ok());
+        }
+    }
+    others.push(main);
+    for other in others {
+        let Some(dir) = other.workdir().map(|w| normalize(&w.to_string_lossy())) else { continue };
+        if Some(&dir) == here.as_ref() {
+            continue;
+        }
+        if let Ok(head) = other.head() {
+            if head.is_branch() {
+                if let Ok(name) = head.shorthand() {
+                    held.insert(name.to_string(), dir);
+                }
+            }
+        }
+    }
+    held
+}
+
+/// Refuses `action` ("check out", "delete", "rename") on a branch that another working directory has checked out.
+pub(crate) fn refuse_if_held(repo: &Repository, branch: &str, action: &str) -> Result<(), String> {
+    match branches_held_elsewhere(repo).get(branch) {
+        Some(dir) => Err(format!(
+            "Can't {action} \"{branch}\": it is checked out in the worktree {dir}. A branch can be checked out in one \
+             working directory only. Open that worktree (Worktrees section) and switch it to another branch, or remove it, first."
+        )),
+        None => Ok(()),
+    }
+}
+
+/// How many files have uncommitted changes in each working directory (same count as the Changes panel), by path.
+/// Folders that are gone or can't be read are left out.
+fn count_changes(path: &str) -> Result<HashMap<String, usize>, String> {
+    let list = list_worktrees(path)?;
+    let counts = std::thread::scope(|s| {
+        let jobs: Vec<_> = list
+            .iter()
+            .filter(|w| !w.missing)
+            .map(|w| {
+                s.spawn(move || {
+                    let repo = Repository::open(&w.path).ok()?;
+                    crate::changes::status_of(&repo).ok().map(|c| (w.path.clone(), c.len()))
+                })
+            })
+            .collect();
+        jobs.into_iter().filter_map(|j| j.join().ok().flatten()).collect()
+    });
+    Ok(counts)
+}
+
 async fn blocking<T: Send + 'static>(f: impl FnOnce() -> Result<T, String> + Send + 'static) -> Result<T, String> {
     tauri::async_runtime::spawn_blocking(f).await.map_err(|e| e.to_string())?
 }
@@ -168,6 +231,13 @@ pub async fn add_worktree_cmd(path: String, branch: String) -> Result<String, St
 #[tauri::command]
 pub async fn remove_worktree_cmd(path: String, worktree: String, force: bool) -> Result<(), String> {
     blocking(move || remove_worktree(&path, &worktree, force)).await
+}
+
+/// Uncommitted files per worktree path. Separate from `get_worktrees` because scanning every working tree is slow;
+/// the list shows first and the counts follow.
+#[tauri::command]
+pub async fn count_worktree_changes(path: String) -> Result<HashMap<String, usize>, String> {
+    blocking(move || count_changes(&path)).await
 }
 
 /// Forgets worktrees whose folder was deleted by hand.
@@ -266,6 +336,60 @@ mod tests {
         remove_worktree(&path, &new, true).unwrap();
         assert!(!Path::new(&new).exists());
         assert!(remove_worktree(&path, &path, true).unwrap_err().contains("main"));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn knows_which_branches_other_worktrees_hold_and_refuses_to_touch_them() {
+        use crate::sidebar::branches::{checkout_branch, delete_branch_checked, local_branches, rename_branch};
+        let (root, path) = setup("held");
+        git(Path::new(&path), &["branch", "spare"]);
+        let new = add_worktree(&path, "topic").unwrap();
+
+        // From the main working directory "topic" is held by the new one; from there "main" is held by the main one.
+        let main_repo = Repository::open(&path).unwrap();
+        let held = branches_held_elsewhere(&main_repo);
+        assert_eq!(held.get("topic"), Some(&new));
+        assert!(!held.contains_key("main"));
+        let linked_repo = Repository::open(&new).unwrap();
+        let held = branches_held_elsewhere(&linked_repo);
+        assert_eq!(held.get("main"), Some(&path));
+        assert!(!held.contains_key("topic"));
+
+        let listed = local_branches(&main_repo).unwrap();
+        assert_eq!(listed.iter().find(|b| b.name == "topic").unwrap().worktree.as_deref(), Some(new.as_str()));
+        assert!(listed.iter().find(|b| b.name == "main").unwrap().worktree.is_none());
+
+        // The refusal names the worktree, and nothing moved.
+        let msg = checkout_branch(&linked_repo, "main").unwrap_err();
+        assert!(msg.contains("checked out in the worktree") && msg.contains(&path), "{msg}");
+        assert!(linked_repo.head().unwrap().shorthand().unwrap() == "topic");
+        assert!(checkout_branch(&main_repo, "topic").unwrap_err().contains(&new));
+        assert!(delete_branch_checked(&main_repo, "topic").unwrap_err().contains("delete"));
+        assert!(rename_branch(&main_repo, "topic", "renamed").unwrap_err().contains("rename"));
+        assert!(main_repo.find_branch("topic", BranchType::Local).is_ok());
+
+        // A free branch is still fine.
+        checkout_branch(&linked_repo, "spare").unwrap();
+        assert!(branches_held_elsewhere(&main_repo).contains_key("spare"));
+        remove_worktree(&path, &new, false).unwrap();
+        assert!(branches_held_elsewhere(&main_repo).is_empty());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn counts_changed_files_per_worktree() {
+        let (root, path) = setup("counts");
+        let new = add_worktree(&path, "work").unwrap();
+        std::fs::write(Path::new(&new).join("a.txt"), "changed").unwrap();
+        std::fs::write(Path::new(&new).join("b.txt"), "new").unwrap();
+        let gone = add_worktree(&path, "gone").unwrap();
+        std::fs::remove_dir_all(&gone).unwrap();
+
+        let counts = count_changes(&path).unwrap();
+        assert_eq!(counts.get(&path), Some(&0));
+        assert_eq!(counts.get(&new), Some(&2));
+        assert!(!counts.contains_key(&gone));
         let _ = std::fs::remove_dir_all(root);
     }
 

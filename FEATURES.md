@@ -43,7 +43,7 @@ Esc leaves text fields and the terminal alone, so it never interferes with typin
 
 ## Not yet implemented
 
-- Worktrees: marking a branch that is checked out in one, per-worktree change badges, starting an agent in one, merging one back
+- Worktrees: starting an agent in one, merging one back
 - Pushing tags
 - Unstaging a single line (staging and discarding one are built)
 - Conflict resolution for rebases, cherry-pick and revert (only merges, and pulls that merge, stop for the conflict view; the others are cancelled)

@@ -180,6 +180,15 @@
     color: #e0c27a;
   }
 
+  // A branch another worktree has checked out: thin outline and a marker, so it reads as "taken" without competing with the head chip.
+  &.in-worktree {
+    box-shadow: inset 0 0 0 1px currentColor;
+
+    &::before {
+      content: "⧉ ";
+    }
+  }
+
   // The checked-out branch: filled, with a soft halo so it stands out among the other chips.
   &.head {
     background: $accent;

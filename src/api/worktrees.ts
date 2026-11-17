@@ -23,6 +23,12 @@ export interface WorktreeInfo {
 export const getWorktrees = (path: string) => invoke<WorktreeInfo[]>("get_worktrees", { path });
 
 /**
+ * How many files have uncommitted changes in each worktree, by path (a folder that is gone has no entry). Slower
+ * than `getWorktrees`, so it is asked for separately.
+ */
+export const countWorktreeChanges = (path: string) => invoke<Record<string, number>>("count_worktree_changes", { path });
+
+/**
  * Adds a worktree in `<repo>.worktrees/<branch>` next to the repository, with `branch` checked out: an existing
  * branch as it is (git refuses one that another worktree has checked out), otherwise a new one from the current
  * commit. Resolves to the new worktree's path.

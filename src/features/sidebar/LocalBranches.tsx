@@ -185,7 +185,7 @@ export default function LocalBranches({
             key={b.name}
             style={leafIndent(row.depth)}
             className={(b.isHead ? "current" : "") + (menu?.branch.name === b.name ? " ctx" : "")}
-            title={b.isHead ? t.localBranches.current(b.name) : t.localBranches.checkoutHint(b.name)}
+            title={b.isHead ? t.localBranches.current(b.name) : b.worktree ? t.localBranches.inWorktree(b.worktree) : t.localBranches.checkoutHint(b.name)}
             onDoubleClick={() => editing === null && switchTo(b)}
             onContextMenu={(e) => {
               e.preventDefault();
@@ -201,6 +201,7 @@ export default function LocalBranches({
             ) : (
               <span className="bname">{row.label}</span>
             )}
+            {b.worktree && <span className="wt-badge" title={t.localBranches.inWorktree(b.worktree)}>{t.localBranches.inWorktreeBadge}</span>}
             {b.behind > 0 && <span className="sync">↓{b.behind}</span>}
             {b.ahead > 0 && <span className="sync">↑{b.ahead}</span>}
           </li>
@@ -285,6 +286,8 @@ export default function LocalBranches({
             {
               label: t.localBranches.rename,
               separatorBefore: true,
+              disabled: menu.branch.worktree !== null,
+              title: menu.branch.worktree ? t.localBranches.renameInWorktree(menu.branch.worktree) : undefined,
               onClick: () => {
                 setError(null);
                 setEditing(menu.branch.name);
@@ -293,10 +296,12 @@ export default function LocalBranches({
             {
               label: t.localBranches.delete,
               danger: true,
-              disabled: menu.branch.isHead,
+              disabled: menu.branch.isHead || menu.branch.worktree !== null,
               title: menu.branch.isHead
                 ? t.localBranches.deleteCurrent
-                : undefined,
+                : menu.branch.worktree
+                  ? t.localBranches.deleteInWorktree(menu.branch.worktree)
+                  : undefined,
               onClick: () => deleteBranch(menu.branch),
             },
           ]}

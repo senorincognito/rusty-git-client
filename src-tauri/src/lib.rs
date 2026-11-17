@@ -110,6 +110,7 @@ pub fn run() {
             sidebar::stash::drop_all_stashes_cmd,
             sidebar::stash::drop_stash_cmd,
             sidebar::worktrees::get_worktrees,
+            sidebar::worktrees::count_worktree_changes,
             sidebar::worktrees::add_worktree_cmd,
             sidebar::worktrees::remove_worktree_cmd,
             sidebar::worktrees::prune_worktrees_cmd,

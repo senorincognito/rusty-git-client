@@ -574,7 +574,11 @@ export default function Graph({
               )}
               <div className="subject">
                 {row.refs.map((r) => (
-                  <span key={r.kind + r.name} className={`ref ${r.kind}${r.isHead ? " head" : ""}`}>
+                  <span
+                    key={r.kind + r.name}
+                    className={`ref ${r.kind}${r.isHead ? " head" : ""}${r.worktree ? " in-worktree" : ""}`}
+                    title={r.worktree ? t.graph.inWorktree(r.worktree) : undefined}
+                  >
                     {r.name}
                   </span>
                 ))}

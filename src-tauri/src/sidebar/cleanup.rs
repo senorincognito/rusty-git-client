@@ -85,10 +85,11 @@ fn merged_local(repo: &Repository) -> Result<MergedBranches, String> {
     let mut bases: Vec<Base> = local_base(repo).into_iter().collect();
     bases.extend(all_remotes(repo).iter().filter_map(|r| remote_base(repo, r)));
     let mut branches = Vec::new();
+    let held = crate::sidebar::worktrees::branches_held_elsewhere(repo);
     for item in repo.branches(Some(BranchType::Local)).map_err(err)? {
         let (branch, _) = item.map_err(err)?;
         let (Ok(Some(name)), Some(tip)) = (branch.name(), branch.get().target()) else { continue };
-        if branch.is_head() || is_protected(name, &bases) {
+        if branch.is_head() || held.contains_key(name) || is_protected(name, &bases) {
             continue;
         }
         if bases.iter().any(|b| merged_into(repo, tip, b.tip)) {

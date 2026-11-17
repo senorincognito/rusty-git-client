@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { confirmDialog } from "@/api/dialog";
 import { openRepo, type RepoInfo } from "@/api/repo";
-import { addWorktree, getWorktrees, pruneWorktrees, removeWorktree, type WorktreeInfo } from "@/api/worktrees";
+import { addWorktree, countWorktreeChanges, getWorktrees, pruneWorktrees, removeWorktree, type WorktreeInfo } from "@/api/worktrees";
 import ContextMenu from "@/components/ContextMenu";
 import Section from "@/components/Section";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
@@ -34,6 +34,8 @@ export default function Worktrees({
   onRemoved: (path: string) => void;
 }) {
   const [list, setList] = useState<WorktreeInfo[] | null>(null);
+  // Uncommitted files per worktree path. Scanning every working tree is slow, so it arrives after the list.
+  const [changes, setChanges] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; worktree: WorktreeInfo } | null>(null);
@@ -55,6 +57,10 @@ export default function Worktrees({
       if (!isCurrent()) return;
       setList(next);
       setError(null);
+      if (next.length > 1) {
+        const counts = await countWorktreeChanges(path);
+        if (isCurrent()) setChanges(counts);
+      }
     } catch (e) {
       if (isCurrent()) setError(String(e));
     }
@@ -63,6 +69,12 @@ export default function Worktrees({
   useEffect(() => {
     refresh();
   }, [refresh, refreshKey]);
+
+  // Edits inside a worktree's folder aren't watched (nor are other worktrees' indexes), so look again on focus.
+  useEffect(() => {
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, [refresh]);
 
   const run = async (action: () => Promise<void>) => {
     setBusy(true);
@@ -175,6 +187,11 @@ export default function Worktrees({
           >
             <span className="bname">{w.branch ?? t.worktrees.detached(w.head)}</span>
             <span className="wt-folder">{w.name}</span>
+            {!w.missing && (changes[w.path] ?? 0) > 0 && (
+              <span className="wt-changes" title={t.worktrees.changes(changes[w.path])}>
+                {changes[w.path]}
+              </span>
+            )}
             {w.isMain && <span className="wt-badge">{t.worktrees.mainBadge}</span>}
             {w.locked && <span className="wt-badge">{t.worktrees.lockedBadge}</span>}
             {w.missing && <span className="wt-badge">{t.worktrees.missingBadge}</span>}

@@ -12,6 +12,8 @@ pub struct BranchInfo {
     pub upstream: Option<String>,
     pub ahead: usize,
     pub behind: usize,
+    /// Path of the other working directory that has this branch checked out, if any.
+    pub worktree: Option<String>,
 }
 
 fn err(e: git2::Error) -> String {
@@ -19,13 +21,15 @@ fn err(e: git2::Error) -> String {
 }
 
 /// Local branches, sorted alphabetically (case-insensitive).
-fn local_branches(repo: &Repository) -> Result<Vec<BranchInfo>, String> {
+pub(crate) fn local_branches(repo: &Repository) -> Result<Vec<BranchInfo>, String> {
     let mut out = Vec::new();
+    let held = crate::sidebar::worktrees::branches_held_elsewhere(repo);
     for item in repo.branches(Some(BranchType::Local)).map_err(err)? {
         let (branch, _) = item.map_err(err)?;
         let Some(name) = branch.name().ok().flatten().map(str::to_string) else { continue };
 
-        let mut info = BranchInfo { name, is_head: branch.is_head(), upstream: None, ahead: 0, behind: 0 };
+        let worktree = held.get(&name).cloned();
+        let mut info = BranchInfo { name, is_head: branch.is_head(), upstream: None, ahead: 0, behind: 0, worktree };
         if let Ok(up) = branch.upstream() {
             info.upstream = up.name().ok().flatten().map(str::to_string);
             if let (Some(l), Some(u)) = (branch.get().target(), up.get().target()) {
@@ -62,12 +66,13 @@ pub(crate) fn validate_branch_name(name: &str) -> Result<&str, String> {
 
 /// Renames a local branch. Its upstream and branch settings move with it, and so does HEAD when it is the
 /// checked-out branch (the files are not touched).
-fn rename_branch(repo: &Repository, name: &str, new_name: &str) -> Result<(), String> {
+pub(crate) fn rename_branch(repo: &Repository, name: &str, new_name: &str) -> Result<(), String> {
     let new_name = validate_branch_name(new_name)?;
     let mut branch = repo.find_branch(name, BranchType::Local).map_err(|_| format!("Branch \"{name}\" not found"))?;
     if new_name == name {
         return Err("The name is unchanged".into());
     }
+    crate::sidebar::worktrees::refuse_if_held(repo, name, "rename")?;
     // "feature" and "feature/x" can't both exist as refs. Check this up front: libgit2 reports the
     // clash only after it has already removed the old ref (see the safety net below).
     for existing in local_branches(repo)? {
@@ -148,11 +153,12 @@ pub async fn create_branch(path: String, name: String) -> Result<(), String> {
 
 /// Switches to an existing local branch, like `git switch`. Safe: fails instead of
 /// overwriting uncommitted changes that the target branch would touch.
-fn checkout_branch(repo: &Repository, name: &str) -> Result<(), String> {
+pub(crate) fn checkout_branch(repo: &Repository, name: &str) -> Result<(), String> {
     let branch = repo.find_branch(name, BranchType::Local).map_err(|_| format!("Branch \"{name}\" not found"))?;
     if branch.is_head() {
         return Ok(());
     }
+    crate::sidebar::worktrees::refuse_if_held(repo, name, "check out")?;
     let refname = branch.get().name().map(str::to_string).map_err(|_| "Branch name is not valid UTF-8".to_string())?;
     let target = branch.get().peel(ObjectType::Commit).map_err(err)?;
 
@@ -271,11 +277,12 @@ fn unmerged_commits(repo: &Repository, name: &str) -> Result<usize, String> {
     Ok(walk.count())
 }
 
-fn delete_branch_checked(repo: &Repository, name: &str) -> Result<(), String> {
+pub(crate) fn delete_branch_checked(repo: &Repository, name: &str) -> Result<(), String> {
     let mut branch = repo.find_branch(name, BranchType::Local).map_err(|_| format!("Branch \"{name}\" not found"))?;
     if branch.is_head() {
         return Err("Cannot delete the branch that is currently checked out".into());
     }
+    crate::sidebar::worktrees::refuse_if_held(repo, name, "delete")?;
     branch.delete().map_err(err)
 }
 
@@ -284,9 +291,10 @@ fn delete_branch_checked(repo: &Repository, name: &str) -> Result<(), String> {
 /// behind or without an upstream, and names that no longer exist are skipped. Returns the names that were deleted.
 fn delete_synced(repo: &Repository, names: &[String]) -> Result<Vec<String>, String> {
     let mut deleted = Vec::new();
+    let held = crate::sidebar::worktrees::branches_held_elsewhere(repo);
     for name in names {
         let Ok(mut branch) = repo.find_branch(name, BranchType::Local) else { continue };
-        if branch.is_head() {
+        if branch.is_head() || held.contains_key(name) {
             continue;
         }
         let tip = branch.get().target();

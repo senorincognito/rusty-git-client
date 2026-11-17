@@ -24,6 +24,9 @@ pub struct RefLabel {
     /// "branch" | "remote" | "tag"
     pub kind: &'static str,
     pub is_head: bool,
+    /// Branches: the other working directory that has it checked out, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub worktree: Option<String>,
 }
 
 /// A line entering the node from the top edge of its row.
@@ -86,6 +89,7 @@ fn collect_refs(repo: &Repository) -> Result<RefsAndTips, git2::Error> {
     let mut labels: HashMap<Oid, Vec<RefLabel>> = HashMap::new();
     let mut tips = Vec::new();
     let head_name = repo.head().ok().and_then(|h| h.name().ok().map(str::to_string));
+    let held = crate::sidebar::worktrees::branches_held_elsewhere(repo);
 
     for r in repo.references()?.flatten() {
         let Ok(full) = r.name() else { continue };
@@ -108,6 +112,7 @@ fn collect_refs(repo: &Repository) -> Result<RefsAndTips, git2::Error> {
             name: short.to_string(),
             kind,
             is_head: head_name.as_deref() == Some(full),
+            worktree: if kind == "branch" { held.get(short).cloned() } else { None },
         });
     }
 
@@ -116,7 +121,12 @@ fn collect_refs(repo: &Repository) -> Result<RefsAndTips, git2::Error> {
         if !h.is_branch() {
             if let Some(oid) = h.target() {
                 tips.push(oid);
-                labels.entry(oid).or_default().push(RefLabel { name: "HEAD".into(), kind: "branch", is_head: true });
+                labels.entry(oid).or_default().push(RefLabel {
+                    name: "HEAD".into(),
+                    kind: "branch",
+                    is_head: true,
+                    worktree: None,
+                });
             }
         }
     }
@@ -236,6 +246,7 @@ fn inputs(repo: &mut Repository) -> Result<Inputs, String> {
             name: format!("stash@{{{}}}", stash.index),
             kind: "stash",
             is_head: false,
+            worktree: None,
         });
     }
 

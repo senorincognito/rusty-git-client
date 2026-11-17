@@ -305,20 +305,27 @@
 }
 
 // ---- Worktrees ----
+.branchlist .wt-badge,
+.worktreelist .wt-badge {
+  flex: none;
+  color: $muted;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
 .worktreelist li {
+  .wt-changes {
+    flex: none;
+    color: $accent;
+    font-size: 11px;
+  }
+
   .wt-folder {
     flex: 0 1 40%;
     min-width: 0;
     @include truncate;
     color: $muted;
     font-size: 11px;
-  }
-
-  .wt-badge {
-    flex: none;
-    color: $muted;
-    font-size: 10px;
-    text-transform: uppercase;
   }
 
   &.missing {

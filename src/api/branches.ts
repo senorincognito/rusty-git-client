@@ -6,6 +6,8 @@ export interface BranchInfo {
   upstream: string | null;
   ahead: number;
   behind: number;
+  /** Path of the other worktree that has this branch checked out, if any. */
+  worktree: string | null;
 }
 
 export const getLocalBranches = (path: string) =>
