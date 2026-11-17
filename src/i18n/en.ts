@@ -445,6 +445,12 @@ export const en = {
     noBranch: "This worktree has no branch (detached HEAD)",
     tabDetached: "Check out a branch in this tab first",
     uncommitted: (n: number) => `${n} uncommitted ${n === 1 ? "file" : "files"} in that worktree are not part of the branch yet.`,
+    uncommittedTitle: "Uncommitted changes",
+    uncommittedOk: "Continue",
+    uncommittedConfirm: (branch: string, n: number) =>
+      `${n} uncommitted ${n === 1 ? "file" : "files"} in the worktree of ${branch} ${n === 1 ? "is" : "are"} not part of the branch yet, so ${n === 1 ? "it" : "they"} will not be merged. Only commits count: commit in that worktree first if the work should come along.
+
+Continue with the commits it has?`,
     finish: "Finish…",
     finishHint: "Merge the branch into the checked-out branch, then remove the worktree and delete the branch",
     finishDirty: "Commit or discard the changes in that worktree first",

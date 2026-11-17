@@ -207,6 +207,13 @@ export default function Worktrees({
     });
   };
 
+  // Merging or rebasing takes commits only: say so when the agent left work uncommitted, before it looks like an empty merge.
+  const withCommitsOnly = async (w: WorktreeInfo, action: () => void) => {
+    const uncommitted = changes[w.path] ?? 0;
+    if (uncommitted > 0 && !(await confirmDialog(t.worktrees.uncommittedConfirm(w.branch ?? "", uncommitted), t.worktrees.uncommittedTitle, true, t.worktrees.uncommittedOk))) return;
+    action();
+  };
+
   // Why a worktree can't be merged (or rebased onto, or finished): this tab's own, gone, detached, or no branch here.
   const blocked = (w: WorktreeInfo) =>
     w.missing
@@ -260,13 +267,13 @@ export default function Worktrees({
         separatorBefore: true,
         disabled: busy || !!reason,
         title: reason ?? (uncommitted > 0 ? `${t.worktrees.mergeHint}\n${t.worktrees.uncommitted(uncommitted)}` : t.worktrees.mergeHint),
-        onClick: () => onMerge(`refs/heads/${w.branch}`, w.branch!),
+        onClick: () => withCommitsOnly(w, () => onMerge(`refs/heads/${w.branch}`, w.branch!)),
       },
       {
         label: t.worktrees.rebase(currentBranch ?? "…", w.branch ?? "…"),
         disabled: busy || !!reason,
         title: reason ?? (uncommitted > 0 ? `${t.worktrees.rebaseHint}\n${t.worktrees.uncommitted(uncommitted)}` : t.worktrees.rebaseHint),
-        onClick: () => onRebaseOnto(`refs/heads/${w.branch}`, w.branch!),
+        onClick: () => withCommitsOnly(w, () => onRebaseOnto(`refs/heads/${w.branch}`, w.branch!)),
       },
       {
         label: t.worktrees.finish,
