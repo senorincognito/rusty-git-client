@@ -578,11 +578,18 @@ mod tests {
         let cmd = "pwd; echo gc-\"done\"\n";
         session.write(cmd.as_bytes()).unwrap();
 
-        let deadline = Instant::now() + Duration::from_secs(20);
+        // A shell on a slow CI runner (PowerShell loading its profile) can take longer than a few seconds to start, and
+        // input typed before it reads its line can be lost, so the command is typed again until the marker shows up.
+        let deadline = Instant::now() + Duration::from_secs(60);
+        let mut resend = Instant::now() + Duration::from_secs(5);
         let mut replay = String::new();
         while Instant::now() < deadline && !replay.contains("gc-done") {
             std::thread::sleep(Duration::from_millis(200));
             replay = session.shared.out.lock().unwrap().replay();
+            if Instant::now() >= resend && !replay.contains("gc-done") {
+                session.write(cmd.as_bytes()).unwrap();
+                resend = Instant::now() + Duration::from_secs(5);
+            }
         }
         assert!(replay.contains("gc-done"), "no output marker; got: {replay:?}");
         assert!(replay.contains(&leaf), "cwd not used; got: {replay:?}");
