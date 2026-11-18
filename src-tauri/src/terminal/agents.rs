@@ -9,6 +9,7 @@ fn program(command: &str) -> Option<&str> {
 }
 
 /// Whether `prog` is a file in one of `dirs`, as is or with one of `exts` appended (".exe", ".cmd", ... on Windows).
+#[cfg_attr(not(windows), allow(dead_code))] // only `on_path` on Windows calls it; the test runs everywhere
 fn exists_in(prog: &str, dirs: &[PathBuf], exts: &[String]) -> bool {
     dirs.iter().any(|dir| dir.join(prog).is_file() || exts.iter().any(|ext| dir.join(format!("{prog}{ext}")).is_file()))
 }

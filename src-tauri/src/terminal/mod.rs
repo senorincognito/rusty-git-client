@@ -151,7 +151,7 @@ fn refresh_agents(sessions: &mut HashMap<String, Session>, system: &Mutex<Option
     let Some(system) = guard.as_mut() else { return };
     system.refresh_processes(ProcessesToUpdate::All, true);
     for s in sessions.values_mut() {
-        s.update_agent_state(&system);
+        s.update_agent_state(system);
     }
 }
 
