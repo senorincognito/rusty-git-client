@@ -148,7 +148,10 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#release/}"
           version="${version#v}"
-          ls -l installers
-          gh release create "v$version" installers/* \
+          # Windows files keep their bundle subfolders (nsis/, msi/): upload-artifact preserves the common ancestor of
+          # several paths, and gh can't upload a directory.
+          mapfile -d '' files < <(find installers -type f -print0)
+          printf '%s\n' "${files[@]}"
+          gh release create "v$version" "${files[@]}" \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --draft --generate-notes --title "Rusty Git Client v$version"
