@@ -416,6 +416,17 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    /// Git skips a hook that is not executable (unix), so the script needs the bit set.
+    fn write_hook(hooks: &Path, name: &str, script: &str) {
+        let file = hooks.join(name);
+        fs::write(&file, script).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&file, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+    }
+
     #[test]
     fn commit_and_amend_run_hooks() {
         let dir = std::env::temp_dir().join(format!("gc-hooks-test-{}", std::process::id()));
@@ -432,21 +443,21 @@ mod tests {
         stage(&repo, &["a.txt".into()]).unwrap();
 
         // A failing pre-commit rejects the commit and its output reaches the caller.
-        fs::write(hooks.join("pre-commit"), "#!/bin/sh\necho 'lint failed' >&2\nexit 1\n").unwrap();
+        write_hook(&hooks, "pre-commit", "#!/bin/sh\necho 'lint failed' >&2\nexit 1\n");
         let e = commit_staged(&repo, "first", false).unwrap_err();
         assert!(e.contains("lint failed"), "{e}");
         assert!(repo.head().is_err());
 
         // commit-msg may rewrite the message; post-commit runs after success.
-        fs::write(hooks.join("pre-commit"), "#!/bin/sh\nexit 0\n").unwrap();
-        fs::write(hooks.join("commit-msg"), "#!/bin/sh\necho 'Signed' >> \"$1\"\n").unwrap();
-        fs::write(hooks.join("post-commit"), "#!/bin/sh\ntouch post-commit-ran\n").unwrap();
+        write_hook(&hooks, "pre-commit", "#!/bin/sh\nexit 0\n");
+        write_hook(&hooks, "commit-msg", "#!/bin/sh\necho 'Signed' >> \"$1\"\n");
+        write_hook(&hooks, "post-commit", "#!/bin/sh\ntouch post-commit-ran\n");
         let first = commit_staged(&repo, "first", false).unwrap();
         assert!(repo.find_commit(first).unwrap().message().unwrap().contains("Signed"));
         assert!(dir.join("post-commit-ran").exists());
 
         // Amend goes through the hooks too.
-        fs::write(hooks.join("pre-commit"), "#!/bin/sh\necho 'no amend' >&2\nexit 1\n").unwrap();
+        write_hook(&hooks, "pre-commit", "#!/bin/sh\necho 'no amend' >&2\nexit 1\n");
         assert!(amend_head(&repo, "reworded", false).unwrap_err().contains("no amend"));
         assert_eq!(repo.head().unwrap().target(), Some(first));
 
