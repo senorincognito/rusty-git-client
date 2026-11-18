@@ -24,8 +24,8 @@ jobs:
     name: Frontend (lint, typecheck, bundle)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -38,7 +38,7 @@ jobs:
     name: Rust (rustfmt, clippy)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install Tauri's Linux dependencies
         run: |
           sudo apt-get update
@@ -64,7 +64,7 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -100,7 +100,7 @@ jobs:
             files: |
               src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: The branch name must match the app version
         shell: bash
         run: |
@@ -111,7 +111,7 @@ jobs:
             echo "Branch $GITHUB_REF_NAME does not match the version in package.json ($version)" >&2
             exit 1
           fi
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -125,7 +125,7 @@ jobs:
       - name: Build the installers
         shell: bash
         run: npm run tauri build -- ${{ matrix.args }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.files }}
@@ -138,7 +138,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           path: installers
           merge-multiple: true
